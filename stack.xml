@@ -1,0 +1,11 @@
+<stack>
+:a
+:q
+  <description brief="TUM Machine Vision and Perception Group Object Recognition Stack">
+  </description>
+  <author>Chavdar Papazov (papazov@in.tum.de)</author>
+  <author>Darius Burschka (burschka@in.tum.de)</author>
+  <license>Research Purposes Only, NOT FOR REDISTRIBUTION</license>
+
+  <depend stack="ros"/>
+</stack>

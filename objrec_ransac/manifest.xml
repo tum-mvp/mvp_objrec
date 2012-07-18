@@ -1,0 +1,15 @@
+<package>
+  <description brief="objrec_ransac">
+
+     objrec_ransac
+
+  </description>
+  <author>Jonathan Bohren</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/objrec_ransac</url>
+
+  <depend package="opencv"/>
+</package>
+
+
