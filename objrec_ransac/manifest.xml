@@ -9,7 +9,12 @@
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/objrec_ransac</url>
 
-  <depend package="opencv"/>
+  <depend package="opencv2"/>
+
+  <export>
+    <cpp cflags="-I${prefix}/ObjRecRANSAC/src"
+      lflags="-L${prefix}/lib -lmvpVtkBasics -lmvpBasicTools -lmvpBasicToolsL1 -lmvpObjRecRANSAC"/>
+  </export>
 </package>
 
 
