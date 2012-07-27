@@ -8,7 +8,7 @@ int main(int argc, char** argv) {
 
   ros::init(argc,argv,"objrec_node");
 
-  ObjRecInterface or_interface();
+  boost::scoped_ptr<ObjRecInterface> or_interface(new ObjRecInterface());
 
   ros::spin();
   return 0;

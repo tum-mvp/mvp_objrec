@@ -1,0 +1,21 @@
+<launch>
+  <!-- ObjRec Parameters -->
+  <param name="pair_width"                                    value="35.0"/>
+  <param name="voxel_size"                                    value="3.5"/>
+
+  <param name="object_visibility"                             value="0.25"/>
+  <param name="relative_object_size"                          value="0.15"/>
+  <param name="relative_number_of_illegal_points"             value="0.03"/>
+  <param name="z_distance_threshold_as_voxel_size_fraction"   value="3.0"/>
+  <param name="normal_estimation_radius"                      value="3.0"/>
+  <param name="intersection_fraction"                         value="0.09"/>
+  <param name="icp_post_processing"                           value="true"/>
+  <param name="num_threads"                                   value="2"/>
+
+  <!-- Other Recognition Parameters -->
+  <param name="success_probability"                           value="0.99"/>
+  <param name="max_scene_z_value"                             value="1200.0"/>
+  <param name="cut_distant_scene_points"                      value="true"/>
+  <param name="use_only_points_above_plane"                   value="true"/>
+
+</launch>

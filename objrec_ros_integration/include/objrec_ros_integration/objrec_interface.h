@@ -29,7 +29,9 @@ namespace objrec_ros_integration {
 
   private:
     void load_models_from_rosparam();
-    void add_model(const std::string &model_name, const std::string &model_path);
+    void add_model(
+        const std::string &model_name,
+        const std::string &model_uri);
 
     void cloud_cb(const sensor_msgs::PointCloud2 &msg);
     void visualization_pub_thread();
@@ -37,16 +39,18 @@ namespace objrec_ros_integration {
     // ROS Structures
     ros::NodeHandle nh_;
     ros::Subscriber cloud_sub_;
+    ros::Publisher objects_pub_;
+    ros::Publisher markers_pub_;
 
     // ObjRec structure
     boost::scoped_ptr<ObjRecRANSAC> objrec_;
 
     std::list<boost::shared_ptr<UserData> > user_data_list_;
     std::list<vtkSmartPointer<vtkPolyDataReader> > readers_;
+    std::map<std::string,std::string> model_uris_;
 
     // A vtkPoints structure for accumulating points from the scene cloud
     vtkSmartPointer<vtkPoints> scene_points_;
-    std::list<PointSetShape*> detected_models_;
 
     // ObjRec parameters
 

@@ -13,7 +13,7 @@
 
   <export>
     <cpp cflags="-I${prefix}/ObjRecRANSAC/src"
-      lflags="-L${prefix}/lib -lmvpVtkBasics -lmvpBasicTools -lmvpBasicToolsL1 -lmvpObjRecRANSAC"/>
+      lflags="-L${prefix}/lib -lVtkBasics -lBasicTools -lBasicToolsL1 -lObjRecRANSAC"/>
   </export>
 </package>
 

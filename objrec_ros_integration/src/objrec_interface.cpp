@@ -12,6 +12,8 @@
 #include <vtkPoints.h>
 #include <list>
 
+#include <resource_retriever/retriever.h>
+
 #include <ros/ros.h>
 #include <ros/exceptions.h>
 
@@ -22,6 +24,9 @@
 
 #include <sensor_msgs/PointCloud2.h>
 #include <limits>
+
+#include <objrec_msgs/PointSetShape.h>
+#include <objrec_msgs/RecognizedObjects.h>
 
 // Helper function for raising an exception if a required parameter is not found
 template <class T>
@@ -76,39 +81,64 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
 
   // Construct pointclound subscriber
   cloud_sub_ = nh.subscribe("points", 1, &ObjRecInterface::cloud_cb, this);
+  objects_pub_ = nh.advertise<objrec_msgs::RecognizedObjects>("recognized_objects",5);
+
+  ROS_INFO_STREAM("Constructed ObjRec interface.");
 }
+
+ObjRecInterface::~ObjRecInterface() { }
 
 void ObjRecInterface::load_models_from_rosparam()
 {
+  ROS_INFO_STREAM("Loading models from rosparam...");
+
   // Get the list of model param names
   XmlRpc::XmlRpcValue objrec_models_xml;
-  nh_.param("objrec_models", objrec_models_xml, objrec_models_xml);
+  nh_.param("models", objrec_models_xml, objrec_models_xml);
 
   // Iterate through the models 
   for(int i =0; i < objrec_models_xml.size(); i++) {
     std::string model_label = static_cast<std::string>(objrec_models_xml[i]);
-    std::string model_path = "";
 
-    // Get the mesh path
-    require_param(nh_,"objrec_model_paths/"+model_label,model_path);
-    
+    // Get the mesh uri & store it
+    require_param(nh_,"model_paths/"+model_label,model_uris_[model_label]);
+
     // Add the model
-    this->add_model(model_label, model_path);
+    this->add_model(model_label, model_uris_[model_label]);
   }
 }
 
-void ObjRecInterface::add_model(const std::string &model_label, const std::string &model_path)
+void ObjRecInterface::add_model(
+    const std::string &model_label,
+    const std::string &model_uri)
 {
+  ROS_INFO_STREAM("Adding model \""<<model_label<<"\" from "<<model_uri);
+  // Fetch the model data with a ros resource retriever
+  resource_retriever::Retriever retriever;
+  resource_retriever::MemoryResource resource;
+
+  try {
+    resource = retriever.get(model_uri); 
+  } catch (resource_retriever::Exception& e) {
+    ROS_ERROR_STREAM("Failed to retrieve \""<<model_label<<"\" model file from \""<<model_uri<<"\" error: "<<e.what());
+    return;
+  }
+
+  // Load the model into objrec
+  vtkSmartPointer<vtkPolyDataReader> reader =
+    vtkSmartPointer<vtkPolyDataReader>::New();
+  // This copies the data from the resource structure into the polydata reader
+  reader->SetBinaryInputString(
+      (const char*)resource.data.get(),
+      resource.size);
+  reader->ReadFromInputStringOn();
+  reader->Update();
+  readers_.push_back(reader);
+  
   // Create new model user data
   boost::shared_ptr<UserData> user_data(new UserData());
   user_data->setLabel(model_label.c_str());
   user_data_list_.push_back(user_data);
-
-  // Load the model
-  vtkSmartPointer<vtkPolyDataReader> reader = vtkSmartPointer<vtkPolyDataReader>::New();
-  reader->SetFileName(model_path.c_str());
-  reader->Update();
-  readers_.push_back(reader);
 
   // Add the model to the model library
   objrec_->addModel(reader->GetOutput(), user_data.get());
@@ -116,31 +146,48 @@ void ObjRecInterface::add_model(const std::string &model_label, const std::strin
 
 
 void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2 &msg) {
+  ROS_INFO("Received point cloud.");
+
   pcl::PointCloud<pcl::PointXYZ> cloud;
   pcl::fromROSMsg(msg, cloud);
 
+  scene_points_->SetNumberOfPoints( cloud.points.size() );
+  scene_points_->Reset();
+
+  // Fill VTK points structure and convert units
   for (int j = 0; j < (int) cloud.points.size(); ++j) {
-    //create point array
     if (cloud.points[j].x > -0.35) {
-      scene_points_->SetPoint(j,
+      scene_points_->InsertNextPoint(
           cloud.points[j].x * 1000.0,
           cloud.points[j].y * 1000.0,
           cloud.points[j].z * 1000.0);
-    } else {
-      scene_points_->SetPoint(j,
-          std::numeric_limits<double>::quiet_NaN(),
-          std::numeric_limits<double>::quiet_NaN(),
-          std::numeric_limits<double>::quiet_NaN());
-    }
+    } 
   }
 
+  // Detect models
+  std::list<PointSetShape*> detected_models;
 
   ROS_INFO_STREAM("ObjRec: Attempting recognition...");
-  objrec_->doRecognition(scene_points_, success_probability_, detected_models_);
+  objrec_->doRecognition(scene_points_, success_probability_, detected_models);
 
   ROS_INFO("ObjRec: Seconds elapsed = %.2lf \n", objrec_->getLastOverallRecognitionTimeSec());
   ROS_INFO("ObjRec: Seconds per hypothesis = %.6lf  \n", objrec_->getLastOverallRecognitionTimeSec()
       / (double) objrec_->getLastNumberOfCheckedHypotheses());
 
-  detected_models_.clear();
+  // Construct recognized objects message
+  objrec_msgs::RecognizedObjects objects_msg;
+
+  for(std::list<PointSetShape*>::iterator it = detected_models.begin();
+      it != detected_models.end();
+      ++it)
+  {
+    objrec_msgs::PointSetShape pss_msg;
+    pss_msg.label = (*it)->getUserData()->getLabel();
+
+    objects_msg.objects.push_back(pss_msg);
+    delete *it;
+  }
+
+  // Publish the recognized objects
+  objects_pub_.publish(objects_msg);
 }

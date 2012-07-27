@@ -9,6 +9,7 @@
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/objrec_msgs</url>
 
+  <depend package="geometry_msgs"/>
 </package>
 
 
