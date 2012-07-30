@@ -12,6 +12,10 @@
   <param name="icp_post_processing"                           value="true"/>
   <param name="num_threads"                                   value="2"/>
 
+  <!-- Plane segmentation parameters -->
+  <param name="plane_thickness"                               value="15.0"/>
+  <param name="rel_num_off_plane_points"                      value="0.2"/>
+
   <!-- Other Recognition Parameters -->
   <param name="success_probability"                           value="0.99"/>
   <param name="max_scene_z_value"                             value="1200.0"/>

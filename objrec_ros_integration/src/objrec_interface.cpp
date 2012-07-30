@@ -87,6 +87,10 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"use_only_points_above_plane",use_only_points_above_plane_);
   require_param(nh,"cut_distant_scene_points",cut_distant_scene_points_);
 
+  // Plane detection parameters
+  require_param(nh,"plane_thickness",plane_thickness_);
+  require_param(nh,"rel_num_off_plane_points",rel_num_off_plane_points_);
+
   // Construct pointclound subscriber
   cloud_sub_ = nh.subscribe("points", 1, &ObjRecInterface::cloud_cb, this);
   objects_pub_ = nh.advertise<objrec_msgs::RecognizedObjects>("recognized_objects",5);
@@ -230,11 +234,31 @@ void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2 &points_msg)
     } 
   }
 
+  // Remove ground plane
+  vtkSmartPointer<vtkPoints> background_points(vtkPoints::New(VTK_DOUBLE));
+  vtkSmartPointer<vtkPoints> foreground_points(vtkPoints::New(VTK_DOUBLE));
+  RANSACPlaneDetector planeDetector;
+
+  if(use_only_points_above_plane_) {
+    ROS_DEBUG("ObjRec: Removing points not above plane...");
+    // Perform the plane detection
+    planeDetector.detectPlane(scene_points_, rel_num_off_plane_points_, plane_thickness_);
+    // Check the orientation of the detected plane normal
+    if ( planeDetector.getPlaneNormal()[2] > 0.0 ) {
+      planeDetector.flipPlaneNormal();
+    }
+
+    // Get the points above the plane (the scene) and the ones below it (background)
+    planeDetector.getPointsAbovePlane(foreground_points, background_points);
+  } else {
+    foreground_points = scene_points_;
+  }
+
   // Detect models
   std::list<PointSetShape*> detected_models;
 
   ROS_INFO_STREAM("ObjRec: Attempting recognition...");
-  objrec_->doRecognition(scene_points_, success_probability_, detected_models);
+  objrec_->doRecognition(foreground_points, success_probability_, detected_models);
 
   ROS_INFO("ObjRec: Seconds elapsed = %.2lf \n", objrec_->getLastOverallRecognitionTimeSec());
   ROS_INFO("ObjRec: Seconds per hypothesis = %.6lf  \n", objrec_->getLastOverallRecognitionTimeSec()

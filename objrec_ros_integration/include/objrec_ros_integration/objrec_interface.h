@@ -123,6 +123,9 @@ namespace objrec_ros_integration {
     // expire.  TRADEOFF: clear.
     double success_probability_;
 
+    // Plane detection parameters
+    double plane_thickness_; // Since real data is noisy the plane is not infinitely thin
+    double rel_num_off_plane_points_; // At least 20% of the scene points belong to the plane
   };
 }
 
