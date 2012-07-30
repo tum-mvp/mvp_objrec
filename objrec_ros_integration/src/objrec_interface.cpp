@@ -20,17 +20,18 @@
 #include <tf/tf.h>
 #include <geometry_msgs/Pose.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <sensor_msgs/PointCloud2.h>
 
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
 
-#include <objrec_ros_integration/objrec_interface.h>
-
-#include <sensor_msgs/PointCloud2.h>
-#include <limits>
+#include <dynamic_reconfigure/server.h>
 
 #include <objrec_msgs/PointSetShape.h>
 #include <objrec_msgs/RecognizedObjects.h>
+#include <objrec_msgs/ObjRecConfig.h>
+
+#include <objrec_ros_integration/objrec_interface.h>
 
 // Helper function for raising an exception if a required parameter is not found
 template <class T>
@@ -40,6 +41,21 @@ static void require_param(const ros::NodeHandle &nh, const std::string &param_na
     ROS_FATAL_STREAM("Required parameter not found! Namespace: "<<nh.getNamespace()<<" Parameter: "<<param_name);
     throw ros::InvalidParameterException("Parameter not found!");
   }
+}
+
+static void array_to_pose(const double* array, geometry_msgs::Pose &pose_msg)
+{
+  tf::Matrix3x3 rot_m =  tf::Matrix3x3(
+      array[0],array[1],array[2],
+      array[3],array[4],array[5],
+      array[6],array[7],array[8]);
+  tf::Quaternion rot_q;
+  rot_m.getRotation(rot_q);
+  tf::quaternionTFToMsg(rot_q, pose_msg.orientation);
+
+  pose_msg.position.x = array[9] / 1000.0;
+  pose_msg.position.y = array[10] / 1000.0;
+  pose_msg.position.z = array[11] / 1000.0;
 }
 
 using namespace objrec_ros_integration;
@@ -89,12 +105,15 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
 
   // Plane detection parameters
   require_param(nh,"plane_thickness",plane_thickness_);
-  require_param(nh,"rel_num_off_plane_points",rel_num_off_plane_points_);
+  require_param(nh,"rel_num_of_plane_points",rel_num_of_plane_points_);
 
-  // Construct pointclound subscriber
+  // Construct subscribers and publishers
   cloud_sub_ = nh.subscribe("points", 1, &ObjRecInterface::cloud_cb, this);
   objects_pub_ = nh.advertise<objrec_msgs::RecognizedObjects>("recognized_objects",5);
   markers_pub_ = nh.advertise<visualization_msgs::MarkerArray>("recognized_objects_markers",5);
+
+  // Set up dynamic reconfigure
+  reconfigure_server_.setCallback(boost::bind(&ObjRecInterface::reconfigure_cb, this, _1, _2));
 
   ROS_INFO_STREAM("Constructed ObjRec interface.");
 }
@@ -159,57 +178,28 @@ void ObjRecInterface::add_model(
   objrec_->addModel(reader->GetOutput(), user_data.get());
 }
 
-static void array_to_pose(const double* array, geometry_msgs::Pose &pose_msg)
+void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t level)
 {
-  tf::Matrix3x3 rot_m =  tf::Matrix3x3(
-      array[0],array[1],array[2],
-      array[3],array[4],array[5],
-      array[6],array[7],array[8]);
-  tf::Quaternion rot_q;
-  rot_m.getRotation(rot_q);
-  tf::quaternionTFToMsg(rot_q, pose_msg.orientation);
+  ROS_DEBUG("Reconfigure Request!");
+  object_visibility_ = config.object_visibility;
+  relative_object_size_ = config.relative_object_size;
+  relative_number_of_illegal_points_ = config.relative_number_of_illegal_points;
+  z_distance_threshold_as_voxel_size_fraction_ = config.z_distance_threshold_as_voxel_size_fraction; // 1.5*params.voxelSize
+  normal_estimation_radius_ = config.normal_estimation_radius;
+  intersection_fraction_ = config.intersection_fraction;
+  //icp_post_processing_ = config.//icp_post_processing;//FIXME: this is
+  //unimplemented
+  num_threads_ = config.num_threads;
 
-  pose_msg.position.x = array[9] / 1000.0;
-  pose_msg.position.y = array[10] / 1000.0;
-  pose_msg.position.z = array[11] / 1000.0;
-}
-
-void ObjRecInterface::publish_markers(const objrec_msgs::RecognizedObjects &objects_msg)
-{
-  visualization_msgs::MarkerArray marker_array;
-  int id = 0;
-
-  for(std::vector<objrec_msgs::PointSetShape>::const_iterator it = objects_msg.objects.begin();
-      it != objects_msg.objects.end();
-      ++it)
-  {
-    visualization_msgs::Marker marker;
-
-    marker.header = objects_msg.header;
-    marker.type = visualization_msgs::Marker::MESH_RESOURCE;
-    marker.action = visualization_msgs::Marker::ADD;
-    marker.lifetime = ros::Duration(1.0);
-    marker.ns = "objrec";
-    marker.id = 0;
-
-    marker.scale.x = 0.001;
-    marker.scale.y = 0.001;
-    marker.scale.z = 0.001;
-
-    marker.color.a = 1.0;
-    marker.color.r = 1.0;
-    marker.color.g = 0.1;
-    marker.color.b = 0.3;
-
-    marker.id = id++;
-    marker.pose = it->pose;
-    marker.mesh_resource = stl_uris_[it->label];
-
-    marker_array.markers.push_back(marker);
-  }
-
-  // Publish the markers
-  markers_pub_.publish(marker_array);
+	objrec_->setVisibility(object_visibility_);
+	objrec_->setRelativeObjectSize(relative_object_size_);
+	objrec_->setRelativeNumberOfIllegalPoints(relative_number_of_illegal_points_);
+	objrec_->setZDistanceThreshAsVoxelSizeFraction(z_distance_threshold_as_voxel_size_fraction_); // 1.5*params.voxelSize
+	objrec_->setNormalEstimationRadius(normal_estimation_radius_);
+	objrec_->setIntersectionFraction(intersection_fraction_);
+	//objrec_->setICPPostProcessing(icp_post_processing_);//FIXME: this is
+  //unimplemented
+	objrec_->setNumberOfThreads(num_threads_);
 }
 
 void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2 &points_msg)
@@ -243,7 +233,7 @@ void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2 &points_msg)
   if(use_only_points_above_plane_) {
     ROS_DEBUG("ObjRec: Removing points not above plane...");
     // Perform the plane detection
-    planeDetector.detectPlane(scene_points_, rel_num_off_plane_points_, plane_thickness_);
+    planeDetector.detectPlane(scene_points_, rel_num_of_plane_points_, plane_thickness_);
     // Check the orientation of the detected plane normal
     if ( planeDetector.getPlaneNormal()[2] > 0.0 ) {
       planeDetector.flipPlaneNormal();
@@ -291,3 +281,42 @@ void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2 &points_msg)
   // Publish the recognized objects
   objects_pub_.publish(objects_msg);
 }
+
+void ObjRecInterface::publish_markers(const objrec_msgs::RecognizedObjects &objects_msg)
+{
+  visualization_msgs::MarkerArray marker_array;
+  int id = 0;
+
+  for(std::vector<objrec_msgs::PointSetShape>::const_iterator it = objects_msg.objects.begin();
+      it != objects_msg.objects.end();
+      ++it)
+  {
+    visualization_msgs::Marker marker;
+
+    marker.header = objects_msg.header;
+    marker.type = visualization_msgs::Marker::MESH_RESOURCE;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.lifetime = ros::Duration(1.0);
+    marker.ns = "objrec";
+    marker.id = 0;
+
+    marker.scale.x = 0.001;
+    marker.scale.y = 0.001;
+    marker.scale.z = 0.001;
+
+    marker.color.a = 1.0;
+    marker.color.r = 1.0;
+    marker.color.g = 0.1;
+    marker.color.b = 0.3;
+
+    marker.id = id++;
+    marker.pose = it->pose;
+    marker.mesh_resource = stl_uris_[it->label];
+
+    marker_array.markers.push_back(marker);
+  }
+
+  // Publish the markers
+  markers_pub_.publish(marker_array);
+}
+

@@ -36,3 +36,4 @@ target_link_libraries(objrec_node ${PROJECT_NAME})
 #target_link_libraries(example ${PROJECT_NAME})
 rosbuild_add_executable(vtk_to_stl src/vtk_to_stl.cpp)
 target_link_libraries(vtk_to_stl vtkHybrid)
+

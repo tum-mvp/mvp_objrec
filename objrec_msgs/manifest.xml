@@ -10,6 +10,12 @@
   <url>http://ros.org/wiki/objrec_msgs</url>
 
   <depend package="geometry_msgs"/>
+  <depend package="dynamic_reconfigure"/>
+  <depend package="rospy"/>
+
+  <export>
+    <cpp cflags="-I${prefix}/cfg/cpp"/>
+  </export>    
 </package>
 
 

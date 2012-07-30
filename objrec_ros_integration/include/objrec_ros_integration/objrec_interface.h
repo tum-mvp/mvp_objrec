@@ -15,12 +15,13 @@
 #include <vtkSmartPointer.h>
 #include <vtkPolyDataReader.h>
 #include <list>
+#include <boost/scoped_ptr.hpp>
 
 #include <ros/ros.h>
+#include <dynamic_reconfigure/server.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <objrec_msgs/RecognizedObjects.h>
-
-#include <boost/scoped_ptr.hpp>
+#include <objrec_msgs/ObjRecConfig.h>
 
 namespace objrec_ros_integration {
   class ObjRecInterface {
@@ -34,6 +35,8 @@ namespace objrec_ros_integration {
         const std::string &model_name,
         const std::string &model_uri);
 
+    void reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t level);
+
     void cloud_cb(const sensor_msgs::PointCloud2 &msg);
     void publish_markers(const objrec_msgs::RecognizedObjects &msg);
 
@@ -42,6 +45,9 @@ namespace objrec_ros_integration {
     ros::Subscriber cloud_sub_;
     ros::Publisher objects_pub_;
     ros::Publisher markers_pub_;
+
+    // ROS Dynamic Reconfigure
+    dynamic_reconfigure::Server<objrec_msgs::ObjRecConfig> reconfigure_server_;
 
     // ROS Interface parameters
     bool publish_markers_enabled_;
@@ -94,7 +100,7 @@ namespace objrec_ros_integration {
 
     // Plane detection parameters
     double plane_thickness_; // Since real data is noisy the plane is not infinitely thin
-    double rel_num_off_plane_points_; // At least 20% of the scene points belong to the plane
+    double rel_num_of_plane_points_; // At least 20% of the scene points belong to the plane
   };
 }
 

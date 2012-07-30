@@ -18,6 +18,7 @@
   <depend package="pcl_ros"/>
   <depend package="objrec_msgs"/>
   <depend package="resource_retriever"/>
+  <depend package="dynamic_reconfigure"/>
 </package>
 
 
