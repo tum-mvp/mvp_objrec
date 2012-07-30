@@ -188,6 +188,7 @@ void ObjRecInterface::publish_markers(const objrec_msgs::RecognizedObjects &obje
     marker.header = objects_msg.header;
     marker.type = visualization_msgs::Marker::MESH_RESOURCE;
     marker.action = visualization_msgs::Marker::ADD;
+    marker.lifetime = ros::Duration(1.0);
     marker.ns = "objrec";
     marker.id = 0;
 

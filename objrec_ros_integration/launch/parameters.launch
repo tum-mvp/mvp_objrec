@@ -1,16 +1,43 @@
 <launch>
-  <!-- ObjRec Parameters -->
-  <param name="pair_width"                                    value="35.0"/>
-  <param name="voxel_size"                                    value="3.5"/>
+  <!-- ObjRec Parameters (in millimeter) -->
+  <param name="pair_width" value="35.0"/>
+  <!-- Pair width should be roughly half the extent of the visible object
+       part. This means, for each object point p there should be (at least) one
+       point q (from the same object) such that ||p - q|| <= 'pairwidth'.
+       TRADEOFF: Smaller values allow for detection in occluded scenes but lead
+       to more imprecise alignment.  Bigger values lead to better alignment but
+       require large visible object parts. -->
+  <param name="voxel_size" value="3.5"/>
+  <!-- Voxel size is the size of the leafs of the octree, i.e., the "size" of
+       the discretization. TRADEOFF: High values lead to less computation time
+       but ignore object details, e.g., the method could not distinguish
+       between a cylinder and an Amicelli box. Small values allow to better
+       distinguish between objects, but will introduce more holes in the
+       resulting "voxel-surface" (especially for a sparsely sampled scene) and
+       thus will make normal computation unreliable. Processing time, of
+       course, will increase with smaller voxel size. -->
 
-  <param name="object_visibility"                             value="0.25"/>
-  <param name="relative_object_size"                          value="0.15"/>
+  <param name="object_visibility" value="0.25"/>
+  <!-- Object visibility is the expected visible object part expressed as
+       fraction of the hole object. For example 'objectVisibility = 0.1' means
+       that 10% of the object surface is visible in the scene. Note that the
+       visibility can not be more than 0.5 since a typical camera can not see
+       more than the half of the object. TRADEOFF: smaller values allow for a
+       detection in occluded scenes but also lead to more false positives since
+       object hypotheses with small alignment with the scene will be accepted.
+       -->
+  <param name="relative_object_size"                          value="0.05"/>
+  <!-- Relative object size is the expected fraction of the scene points
+       which belong to an object. For example a value of 0.05 means that each
+       object represented in the scene will contain at least 5% of all scene
+       points. TRADEOFF: lower values lead to more computation time and to
+       higher success probability. -->
   <param name="relative_number_of_illegal_points"             value="0.03"/>
   <param name="z_distance_threshold_as_voxel_size_fraction"   value="3.0"/>
   <param name="normal_estimation_radius"                      value="3.0"/>
   <param name="intersection_fraction"                         value="0.09"/>
   <param name="icp_post_processing"                           value="true"/>
-  <param name="num_threads"                                   value="2"/>
+  <param name="num_threads"                                   value="3"/>
 
   <!-- Plane segmentation parameters -->
   <param name="plane_thickness"                               value="15.0"/>

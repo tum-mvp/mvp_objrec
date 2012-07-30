@@ -57,40 +57,10 @@ namespace objrec_ros_integration {
     // A vtkPoints structure for accumulating points from the scene cloud
     vtkSmartPointer<vtkPoints> scene_points_;
 
-    // ObjRec parameters
-
-    // 'pairwidth' should be roughly half the extent of the visible object
-    // part. This means, for each object point p there should be (at least) one
-    // point q (from the same object) such that ||p - q|| <= 'pairwidth'.
-    // TRADEOFF: smaller values allow for detection in occluded scenes but lead
-    // to more imprecise alignment.  Bigger values lead to better alignment but
-    // require large visible object parts.
-    double pair_width_; // in millimeter
-
-    // 'voxelsize' is the size of the leafs of the octree, i.e., the "size" of
-    // the discretization.  TRADEOFF: High values lead to less computation time
-    // but ignore object details, e.g., the method could not distinguish
-    // between a cylinder and an Amicelli box.  Small values allow to better
-    // distinguish between objects, but will introduce more holes in the
-    // resulting "voxel-surface" (especially for a sparsely sampled scene) and
-    // thus will make normal computation unreliable.  Processing time, of
-    // course, will increase with smaller voxel size.
+    // ObjRec parameters (all in millimeter)
+    double pair_width_;
     double voxel_size_;
-    
-    // 'objectVisibility' is the expected visible object part expressed as
-    // fraction of the hole object.  For example 'objectVisibility = 0.1' means
-    // that 10% of the object surface is visible in the scene.  Note that the
-    // visibility can not be more than 0.5 since a typical camera can not see
-    // more than the half of the object.  TRADEOFF: smaller values allow for a
-    // detection in occluded scenes but also lead to more false positives since
-    // object hypotheses with small alignment with the scene will be accepted
     double object_visibility_;
-
-    // 'relative object size' is the expected fraction of the scene points
-    // which belong to an object.  For example a value of 0.05 means that each
-    // object represented in the scene will contain at least 5% of all scene
-    // points.  TRADEOFF: lower values lead to more computation time and to
-    // higher success probability.
     double relative_object_size_;
     double relative_number_of_illegal_points_;
     double z_distance_threshold_as_voxel_size_fraction_;
@@ -99,7 +69,6 @@ namespace objrec_ros_integration {
     
     // Enable iterative closest point post-processing
     bool icp_post_processing_;
-
     // This should equal the number of CPU cores
     int num_threads_;
 
