@@ -1,0 +1,23 @@
+<package>
+  <description brief="objrec_ros_integration">
+
+     objrec_ros_integration
+
+  </description>
+  <author>Jonathan Bohren</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/objrec_ros_integration</url>
+
+  <depend package="roscpp"/>
+  <depend package="tf"/>
+  <depend package="geometry_msgs"/>
+  <depend package="visualization_msgs"/>
+  <depend package="objrec_ransac"/>
+  <depend package="sensor_msgs"/>
+  <depend package="pcl_ros"/>
+  <depend package="objrec_msgs"/>
+  <depend package="resource_retriever"/>
+</package>
+
+

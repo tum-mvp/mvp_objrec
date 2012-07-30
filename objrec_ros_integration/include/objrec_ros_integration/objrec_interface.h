@@ -18,6 +18,7 @@
 
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <objrec_msgs/RecognizedObjects.h>
 
 #include <boost/scoped_ptr.hpp>
 
@@ -34,7 +35,7 @@ namespace objrec_ros_integration {
         const std::string &model_uri);
 
     void cloud_cb(const sensor_msgs::PointCloud2 &msg);
-    void visualization_pub_thread();
+    void publish_markers(const objrec_msgs::RecognizedObjects &msg);
 
     // ROS Structures
     ros::NodeHandle nh_;
@@ -42,12 +43,16 @@ namespace objrec_ros_integration {
     ros::Publisher objects_pub_;
     ros::Publisher markers_pub_;
 
+    // ROS Interface parameters
+    bool publish_markers_enabled_;
+
     // ObjRec structure
     boost::scoped_ptr<ObjRecRANSAC> objrec_;
 
     std::list<boost::shared_ptr<UserData> > user_data_list_;
     std::list<vtkSmartPointer<vtkPolyDataReader> > readers_;
     std::map<std::string,std::string> model_uris_;
+    std::map<std::string,std::string> stl_uris_;
 
     // A vtkPoints structure for accumulating points from the scene cloud
     vtkSmartPointer<vtkPoints> scene_points_;

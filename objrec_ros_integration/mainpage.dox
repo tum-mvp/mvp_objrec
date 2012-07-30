@@ -2,7 +2,7 @@
 \mainpage
 \htmlinclude manifest.html
 
-\b objrec_node 
+\b objrec_ros_integration 
 
 <!-- 
 Provide an overview of your package.

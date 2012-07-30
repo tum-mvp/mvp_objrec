@@ -17,6 +17,10 @@
 #include <ros/ros.h>
 #include <ros/exceptions.h>
 
+#include <tf/tf.h>
+#include <geometry_msgs/Pose.h>
+#include <visualization_msgs/MarkerArray.h>
+
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
 
@@ -42,8 +46,12 @@ using namespace objrec_ros_integration;
 
 ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   nh_(nh),
+  publish_markers_enabled_(false),
   scene_points_(vtkPoints::New(VTK_DOUBLE))
 {
+  // Interface configuration
+  nh.getParam("publish_markers", publish_markers_enabled_);
+
   // Get construction parameters from ROS & construct object recognizer
   require_param(nh,"pair_width",pair_width_);
   require_param(nh,"voxel_size",voxel_size_);
@@ -82,6 +90,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   // Construct pointclound subscriber
   cloud_sub_ = nh.subscribe("points", 1, &ObjRecInterface::cloud_cb, this);
   objects_pub_ = nh.advertise<objrec_msgs::RecognizedObjects>("recognized_objects",5);
+  markers_pub_ = nh.advertise<visualization_msgs::MarkerArray>("recognized_objects_markers",5);
 
   ROS_INFO_STREAM("Constructed ObjRec interface.");
 }
@@ -101,7 +110,9 @@ void ObjRecInterface::load_models_from_rosparam()
     std::string model_label = static_cast<std::string>(objrec_models_xml[i]);
 
     // Get the mesh uri & store it
-    require_param(nh_,"model_paths/"+model_label,model_uris_[model_label]);
+    require_param(nh_,"model_uris/"+model_label,model_uris_[model_label]);
+    // TODO: make this optional
+    require_param(nh_,"stl_uris/"+model_label,stl_uris_[model_label]);
 
     // Add the model
     this->add_model(model_label, model_uris_[model_label]);
@@ -144,17 +155,72 @@ void ObjRecInterface::add_model(
   objrec_->addModel(reader->GetOutput(), user_data.get());
 }
 
+static void array_to_pose(const double* array, geometry_msgs::Pose &pose_msg)
+{
+  tf::Matrix3x3 rot_m =  tf::Matrix3x3(
+      array[0],array[1],array[2],
+      array[3],array[4],array[5],
+      array[6],array[7],array[8]);
+  tf::Quaternion rot_q;
+  rot_m.getRotation(rot_q);
+  tf::quaternionTFToMsg(rot_q, pose_msg.orientation);
 
-void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2 &msg) {
+  pose_msg.position.x = array[9] / 1000.0;
+  pose_msg.position.y = array[10] / 1000.0;
+  pose_msg.position.z = array[11] / 1000.0;
+}
+
+void ObjRecInterface::publish_markers(const objrec_msgs::RecognizedObjects &objects_msg)
+{
+  visualization_msgs::MarkerArray marker_array;
+  int id = 0;
+
+  for(std::vector<objrec_msgs::PointSetShape>::const_iterator it = objects_msg.objects.begin();
+      it != objects_msg.objects.end();
+      ++it)
+  {
+    visualization_msgs::Marker marker;
+
+    marker.header = objects_msg.header;
+    marker.type = visualization_msgs::Marker::MESH_RESOURCE;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.ns = "objrec";
+    marker.id = 0;
+
+    marker.scale.x = 0.001;
+    marker.scale.y = 0.001;
+    marker.scale.z = 0.001;
+
+    marker.color.a = 1.0;
+    marker.color.r = 1.0;
+    marker.color.g = 0.1;
+    marker.color.b = 0.3;
+
+    marker.id = id++;
+    marker.pose = it->pose;
+    marker.mesh_resource = stl_uris_[it->label];
+
+    marker_array.markers.push_back(marker);
+  }
+
+  // Publish the markers
+  markers_pub_.publish(marker_array);
+}
+
+void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2 &points_msg)
+{
   ROS_INFO("Received point cloud.");
 
+  // Convert to PCL cloud, this is vestigal TODO: remove maybe
   pcl::PointCloud<pcl::PointXYZ> cloud;
-  pcl::fromROSMsg(msg, cloud);
+  pcl::fromROSMsg(points_msg, cloud);
 
+  // Make sure the point count is set, and reset the insertion pointer
   scene_points_->SetNumberOfPoints( cloud.points.size() );
   scene_points_->Reset();
 
   // Fill VTK points structure and convert units
+  // ObjRec operates in mm
   for (int j = 0; j < (int) cloud.points.size(); ++j) {
     if (cloud.points[j].x > -0.35) {
       scene_points_->InsertNextPoint(
@@ -176,17 +242,26 @@ void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2 &msg) {
 
   // Construct recognized objects message
   objrec_msgs::RecognizedObjects objects_msg;
+  objects_msg.header = points_msg.header;
 
   for(std::list<PointSetShape*>::iterator it = detected_models.begin();
       it != detected_models.end();
       ++it)
   {
+    PointSetShape *detected_model = *it;
+
+    // Construct and populate a message
     objrec_msgs::PointSetShape pss_msg;
-    pss_msg.label = (*it)->getUserData()->getLabel();
+    pss_msg.label = detected_model->getUserData()->getLabel();
+    pss_msg.confidence = detected_model->getConfidence();
+    array_to_pose(detected_model->getRigidTransform(), pss_msg.pose);
 
     objects_msg.objects.push_back(pss_msg);
     delete *it;
   }
+
+  // Publish the visualization markers
+  this->publish_markers(objects_msg);
 
   // Publish the recognized objects
   objects_pub_.publish(objects_msg);
