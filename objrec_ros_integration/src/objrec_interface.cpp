@@ -202,13 +202,13 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
 	objrec_->setNumberOfThreads(num_threads_);
 }
 
-void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2 &points_msg)
+void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg)
 {
   ROS_INFO("Received point cloud.");
 
   // Convert to PCL cloud, this is vestigal TODO: remove maybe
   pcl::PointCloud<pcl::PointXYZ> cloud;
-  pcl::fromROSMsg(points_msg, cloud);
+  pcl::fromROSMsg(*points_msg, cloud);
 
   // Make sure the point count is set, and reset the insertion pointer
   scene_points_->SetNumberOfPoints( cloud.points.size() );
@@ -257,7 +257,7 @@ void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2 &points_msg)
 
   // Construct recognized objects message
   objrec_msgs::RecognizedObjects objects_msg;
-  objects_msg.header = points_msg.header;
+  objects_msg.header = points_msg->header;
 
   for(std::list<PointSetShape*>::iterator it = detected_models.begin();
       it != detected_models.end();

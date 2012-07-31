@@ -37,7 +37,7 @@ namespace objrec_ros_integration {
 
     void reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t level);
 
-    void cloud_cb(const sensor_msgs::PointCloud2 &msg);
+    void cloud_cb(const sensor_msgs::PointCloud2ConstPtr &msg);
     void publish_markers(const objrec_msgs::RecognizedObjects &msg);
 
     // ROS Structures

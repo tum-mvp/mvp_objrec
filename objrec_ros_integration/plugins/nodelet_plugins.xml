@@ -1,0 +1,8 @@
+<library path="lib/libobjrec_ros_integration">
+  <class name="objrec_ros_integration/ObjRecNodelet" type="objrec_ros_integration::ObjRecNodelet" base_class_type="nodelet::Nodelet">
+    <description>
+      Nodelet for wrapping the TUM Machine Vision and Perception Group ObjRec library.
+    </description>
+  </class>
+</library>
+

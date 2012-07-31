@@ -19,6 +19,13 @@
   <depend package="objrec_msgs"/>
   <depend package="resource_retriever"/>
   <depend package="dynamic_reconfigure"/>
+  <depend package="nodelet"/>
+
+  <export>
+    <nodelet plugin="${prefix}/plugins/nodelet_plugins.xml" />
+  </export>
+
+
 </package>
 
 

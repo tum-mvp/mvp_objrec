@@ -15,6 +15,7 @@ all: ObjRecRANSAC
 	cp $(OBJREC_BUILD_DIR)/src/VtkBasics/libVtkBasics.so $(OBJREC_LIB_PATH)/libVtkBasics.so	
 
 debug: ObjRecRANSAC
+	mkdir -p $(OBJREC_BUILD_DIR)
 	cd $(OBJREC_BUILD_DIR) && cmake .. -DCMAKE_BUILD_TYPE=Debug && make $(ROS_PARALLEL_JOBS)
 	mkdir -p $(OBJREC_LIB_PATH)
 	cp $(OBJREC_BUILD_DIR)/src/BasicTools/libBasicTools.so $(OBJREC_LIB_PATH)/libBasicTools.so	
