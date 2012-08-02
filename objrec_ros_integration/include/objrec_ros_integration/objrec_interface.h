@@ -22,6 +22,8 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <objrec_msgs/RecognizedObjects.h>
 #include <objrec_msgs/ObjRecConfig.h>
+#include <pcl_ros/point_cloud.h>
+#include <pcl/point_types.h>
 
 namespace objrec_ros_integration {
   class ObjRecInterface {
@@ -37,12 +39,14 @@ namespace objrec_ros_integration {
 
     void reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t level);
 
-    void cloud_cb(const sensor_msgs::PointCloud2ConstPtr &msg);
+    void cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg);
+    void pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> > &points_msg);
     void publish_markers(const objrec_msgs::RecognizedObjects &msg);
 
     // ROS Structures
     ros::NodeHandle nh_;
     ros::Subscriber cloud_sub_;
+    ros::Subscriber pcl_cloud_sub_;
     ros::Publisher objects_pub_;
     ros::Publisher markers_pub_;
 
@@ -51,6 +55,8 @@ namespace objrec_ros_integration {
 
     // ROS Interface parameters
     bool publish_markers_enabled_;
+    int n_clouds_per_recognition_;
+    int n_clouds_scanned_;
 
     // ObjRec structure
     boost::scoped_ptr<ObjRecRANSAC> objrec_;

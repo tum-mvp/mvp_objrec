@@ -2,7 +2,7 @@
   <node pkg="nodelet" type="nodelet" name="standalone_nodelet"  args="manager" output="screen"/>
 
   <node pkg="nodelet" type="nodelet" name="objrec_nodelet" args="load objrec_ros_integration/ObjRecNodelet standalone_nodelet" output="screen">
-    <remap from="~/points" to="/camera/depth_registered/points"/>
+    <remap from="~/pcl_points" to="/camera/depth_registered/points"/>
   </node>                 
   <group  ns="objrec_nodelet">
     <include file="$(find objrec_ros_integration)/launch/parameters.launch"/>

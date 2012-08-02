@@ -108,9 +108,10 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"rel_num_of_plane_points",rel_num_of_plane_points_);
 
   // Construct subscribers and publishers
-  cloud_sub_ = nh.subscribe("points", 1, &ObjRecInterface::cloud_cb, this);
-  objects_pub_ = nh.advertise<objrec_msgs::RecognizedObjects>("recognized_objects",5);
-  markers_pub_ = nh.advertise<visualization_msgs::MarkerArray>("recognized_objects_markers",5);
+  cloud_sub_ = nh.subscribe("points", 2, &ObjRecInterface::cloud_cb, this);
+  pcl_cloud_sub_ = nh.subscribe("pcl_points", 2, &ObjRecInterface::pcl_cloud_cb, this);
+  objects_pub_ = nh.advertise<objrec_msgs::RecognizedObjects>("recognized_objects",20);
+  markers_pub_ = nh.advertise<visualization_msgs::MarkerArray>("recognized_objects_markers",20);
 
   // Set up dynamic reconfigure
   reconfigure_server_.setCallback(boost::bind(&ObjRecInterface::reconfigure_cb, this, _1, _2));
@@ -204,24 +205,31 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
 
 void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg)
 {
-  ROS_INFO("Received point cloud.");
+  ROS_INFO_STREAM("Received point cloud "<<(ros::Time::now() - points_msg->header.stamp)<<" seconds after it was acquired.");
 
-  // Convert to PCL cloud, this is vestigal TODO: remove maybe
-  pcl::PointCloud<pcl::PointXYZ> cloud;
-  pcl::fromROSMsg(*points_msg, cloud);
+  // Convert to PCL cloud
+  boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> > cloud(new pcl::PointCloud<pcl::PointXYZ>);
+  pcl::fromROSMsg(*points_msg, *cloud);
+
+  this->pcl_cloud_cb(cloud);
+}
+
+void ObjRecInterface::pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> > &cloud)
+{
+  ROS_INFO_STREAM("Received pcl point cloud "<<(ros::Time::now() - cloud->header.stamp)<<" seconds after it was acquired.");
 
   // Make sure the point count is set, and reset the insertion pointer
-  scene_points_->SetNumberOfPoints( cloud.points.size() );
+  scene_points_->SetNumberOfPoints( n_clouds_per_recognition_*cloud->points.size() );
   scene_points_->Reset();
-
+  
   // Fill VTK points structure and convert units
   // ObjRec operates in mm
-  for (int j = 0; j < (int) cloud.points.size(); ++j) {
-    if (cloud.points[j].x > -0.35) {
+  for (int j = 0; j < (int) cloud->points.size(); ++j) {
+    if (cloud->points[j].x > -0.35 && cloud->points[j].x < 1.0) {
       scene_points_->InsertNextPoint(
-          cloud.points[j].x * 1000.0,
-          cloud.points[j].y * 1000.0,
-          cloud.points[j].z * 1000.0);
+          cloud->points[j].x * 1000.0,
+          cloud->points[j].y * 1000.0,
+          cloud->points[j].z * 1000.0);
     } 
   }
 
@@ -232,6 +240,7 @@ void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_ms
 
   if(use_only_points_above_plane_) {
     ROS_DEBUG("ObjRec: Removing points not above plane...");
+
     // Perform the plane detection
     planeDetector.detectPlane(scene_points_, rel_num_of_plane_points_, plane_thickness_);
     // Check the orientation of the detected plane normal
@@ -241,6 +250,7 @@ void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_ms
 
     // Get the points above the plane (the scene) and the ones below it (background)
     planeDetector.getPointsAbovePlane(foreground_points, background_points);
+
   } else {
     foreground_points = scene_points_;
   }
@@ -257,7 +267,7 @@ void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_ms
 
   // Construct recognized objects message
   objrec_msgs::RecognizedObjects objects_msg;
-  objects_msg.header = points_msg->header;
+  objects_msg.header = cloud->header;
 
   for(std::list<PointSetShape*>::iterator it = detected_models.begin();
       it != detected_models.end();

@@ -37,7 +37,7 @@
   <param name="normal_estimation_radius"                      value="3.0"/>
   <param name="intersection_fraction"                         value="0.09"/>
   <param name="icp_post_processing"                           value="true"/>
-  <param name="num_threads"                                   value="4"/>
+  <param name="num_threads"                                   value="1"/>
 
   <!-- Plane segmentation parameters -->
   <param name="plane_thickness"                               value="15.0"/>
