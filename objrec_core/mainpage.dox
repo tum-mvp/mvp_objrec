@@ -2,7 +2,7 @@
 \mainpage
 \htmlinclude manifest.html
 
-\b objrec_ransac 
+\b objrec_core 
 
 <!-- 
 Provide an overview of your package.

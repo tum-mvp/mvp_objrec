@@ -13,7 +13,7 @@
   <depend package="tf"/>
   <depend package="geometry_msgs"/>
   <depend package="visualization_msgs"/>
-  <depend package="objrec_ransac"/>
+  <depend package="objrec_core"/>
   <depend package="sensor_msgs"/>
   <depend package="pcl_ros"/>
   <depend package="objrec_msgs"/>

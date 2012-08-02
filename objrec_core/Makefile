@@ -1,5 +1,5 @@
 
-OBJREC_PKG_PATH=$(shell rospack find objrec_ransac)
+OBJREC_PKG_PATH=$(shell rospack find objrec_core)
 OBJREC_BUILD_DIR=$(OBJREC_PKG_PATH)/ObjRecRANSAC/build
 OBJREC_LIB_PATH=$(OBJREC_PKG_PATH)/lib
 

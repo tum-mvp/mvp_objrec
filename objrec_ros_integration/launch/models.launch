@@ -3,9 +3,9 @@
     ['Amicelli','Rusk_Box','Soda_Club_Bottle']
   </rosparam>
   <group ns="model_uris">
-    <param name="Amicelli" value="package://objrec_ransac/ObjRecRANSAC/data/Soda_Club_Bottle.vtk"/>
-    <param name="Rusk_Box" value="package://objrec_ransac/ObjRecRANSAC/data/Rusk_Box.vtk"/>
-    <param name="Soda_Club_Bottle" value="package://objrec_ransac/ObjRecRANSAC/data/Soda_Club_Bottle.vtk"/>
+    <param name="Amicelli" value="package://objrec_core/ObjRecRANSAC/data/Soda_Club_Bottle.vtk"/>
+    <param name="Rusk_Box" value="package://objrec_core/ObjRecRANSAC/data/Rusk_Box.vtk"/>
+    <param name="Soda_Club_Bottle" value="package://objrec_core/ObjRecRANSAC/data/Soda_Club_Bottle.vtk"/>
   </group>
   <group ns="stl_uris">
     <param name="Amicelli" value="package://objrec_ros_integration/data/Soda_Club_Bottle.stl"/>

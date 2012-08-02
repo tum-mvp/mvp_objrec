@@ -1,13 +1,13 @@
 <package>
-  <description brief="objrec_ransac">
+  <description brief="objrec_core">
 
-     objrec_ransac
+     objrec_core
 
   </description>
   <author>Jonathan Bohren</author>
   <license>BSD</license>
   <review status="unreviewed" notes=""/>
-  <url>http://ros.org/wiki/objrec_ransac</url>
+  <url>http://ros.org/wiki/objrec_core</url>
 
   <depend package="opencv2"/>
 
