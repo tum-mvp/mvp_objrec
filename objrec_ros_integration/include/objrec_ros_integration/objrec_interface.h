@@ -15,7 +15,11 @@
 #include <vtkSmartPointer.h>
 #include <vtkPolyDataReader.h>
 #include <list>
+#include <queue>
 #include <boost/scoped_ptr.hpp>
+#include <boost/shared_ptr.hpp>
+#include <boost/thread/mutex.hpp>
+#include <boost/thread/thread.hpp>
 
 #include <ros/ros.h>
 #include <dynamic_reconfigure/server.h>
@@ -41,10 +45,11 @@ namespace objrec_ros_integration {
 
     void cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg);
     void pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> > &points_msg);
+    void recognize_objects();
     void publish_markers(const objrec_msgs::RecognizedObjects &msg);
 
     // ROS Structures
-    ros::NodeHandle nh_;
+    ros::NodeHandle &nh_;
     ros::Subscriber cloud_sub_;
     ros::Subscriber pcl_cloud_sub_;
     ros::Publisher objects_pub_;
@@ -56,7 +61,8 @@ namespace objrec_ros_integration {
     // ROS Interface parameters
     bool publish_markers_enabled_;
     int n_clouds_per_recognition_;
-    int n_clouds_scanned_;
+    double z_cuttoff_;
+    double downsample_voxel_size_;
 
     // ObjRec structure
     boost::scoped_ptr<ObjRecRANSAC> objrec_;
@@ -68,6 +74,12 @@ namespace objrec_ros_integration {
 
     // A vtkPoints structure for accumulating points from the scene cloud
     vtkSmartPointer<vtkPoints> scene_points_;
+
+    // Mutex for managing buffery synchronization
+    boost::mutex buffer_mutex_;
+    bool time_to_stop_;
+    std::queue<boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> > > clouds_;
+    boost::scoped_ptr<boost::thread> recognition_thread_;
 
     // ObjRec parameters (all in millimeter)
     double pair_width_;

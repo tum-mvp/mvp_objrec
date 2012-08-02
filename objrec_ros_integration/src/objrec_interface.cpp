@@ -24,6 +24,7 @@
 
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl/filters/voxel_grid.h>
 
 #include <dynamic_reconfigure/server.h>
 
@@ -62,11 +63,19 @@ using namespace objrec_ros_integration;
 
 ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   nh_(nh),
+  reconfigure_server_(nh),
   publish_markers_enabled_(false),
-  scene_points_(vtkPoints::New(VTK_DOUBLE))
+  n_clouds_per_recognition_(1),
+  z_cuttoff_(1.4),
+  downsample_voxel_size_(3.5),
+  scene_points_(vtkPoints::New(VTK_DOUBLE)),
+  time_to_stop_(false)
 {
   // Interface configuration
   nh.getParam("publish_markers", publish_markers_enabled_);
+  nh.getParam("n_clouds_per_recognition", n_clouds_per_recognition_);
+  nh.getParam("z_cuttoff", z_cuttoff_);
+  nh.getParam("downsample_voxel_size", downsample_voxel_size_);
 
   // Get construction parameters from ROS & construct object recognizer
   require_param(nh,"pair_width",pair_width_);
@@ -108,18 +117,24 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"rel_num_of_plane_points",rel_num_of_plane_points_);
 
   // Construct subscribers and publishers
-  cloud_sub_ = nh.subscribe("points", 2, &ObjRecInterface::cloud_cb, this);
-  pcl_cloud_sub_ = nh.subscribe("pcl_points", 2, &ObjRecInterface::pcl_cloud_cb, this);
+  cloud_sub_ = nh.subscribe("points", 1, &ObjRecInterface::cloud_cb, this);
+  pcl_cloud_sub_ = nh.subscribe("pcl_points", 1, &ObjRecInterface::pcl_cloud_cb, this);
   objects_pub_ = nh.advertise<objrec_msgs::RecognizedObjects>("recognized_objects",20);
   markers_pub_ = nh.advertise<visualization_msgs::MarkerArray>("recognized_objects_markers",20);
 
   // Set up dynamic reconfigure
   reconfigure_server_.setCallback(boost::bind(&ObjRecInterface::reconfigure_cb, this, _1, _2));
 
+  // Start recognition thread
+  recognition_thread_.reset(new boost::thread(boost::bind(&ObjRecInterface::recognize_objects, this)));
+
   ROS_INFO_STREAM("Constructed ObjRec interface.");
 }
 
-ObjRecInterface::~ObjRecInterface() { }
+ObjRecInterface::~ObjRecInterface() { 
+  time_to_stop_ = true;
+  recognition_thread_->join();
+}
 
 void ObjRecInterface::load_models_from_rosparam()
 {
@@ -201,6 +216,12 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
 	//objrec_->setICPPostProcessing(icp_post_processing_);//FIXME: this is
   //unimplemented
 	objrec_->setNumberOfThreads(num_threads_);
+
+  // Other parameters
+  n_clouds_per_recognition_ = config.n_clouds_per_recognition;
+  publish_markers_enabled_ = config.publish_markers;
+  z_cuttoff_ = config.z_cuttoff;
+  downsample_voxel_size_ = config.downsample_voxel_size;
 }
 
 void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg)
@@ -216,80 +237,139 @@ void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_ms
 
 void ObjRecInterface::pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> > &cloud)
 {
-  ROS_INFO_STREAM("Received pcl point cloud "<<(ros::Time::now() - cloud->header.stamp)<<" seconds after it was acquired.");
+  // Lock the buffer mutex while we're capturing a new point cloud
+  boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
 
-  // Make sure the point count is set, and reset the insertion pointer
-  scene_points_->SetNumberOfPoints( n_clouds_per_recognition_*cloud->points.size() );
-  scene_points_->Reset();
-  
-  // Fill VTK points structure and convert units
-  // ObjRec operates in mm
-  for (int j = 0; j < (int) cloud->points.size(); ++j) {
-    if (cloud->points[j].x > -0.35 && cloud->points[j].x < 1.0) {
-      scene_points_->InsertNextPoint(
-          cloud->points[j].x * 1000.0,
-          cloud->points[j].y * 1000.0,
-          cloud->points[j].z * 1000.0);
-    } 
+  // Store the cloud
+  clouds_.push(cloud);
+
+  // Increment the cloud index
+  if(clouds_.size() > (unsigned)n_clouds_per_recognition_) {
+    clouds_.pop();
   }
+}
 
-  // Remove ground plane
-  vtkSmartPointer<vtkPoints> background_points(vtkPoints::New(VTK_DOUBLE));
-  vtkSmartPointer<vtkPoints> foreground_points(vtkPoints::New(VTK_DOUBLE));
-  RANSACPlaneDetector planeDetector;
+void ObjRecInterface::recognize_objects() 
+{
+  while(ros::ok() && !time_to_stop_) {
+    // Don't hog the cpu
+    ros::Duration(0.03).sleep();
 
-  if(use_only_points_above_plane_) {
-    ROS_DEBUG("ObjRec: Removing points not above plane...");
+    // Scope for syncrhonization
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_full(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>());
+    {
+      // Lock the buffer mutex
+      boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
 
-    // Perform the plane detection
-    planeDetector.detectPlane(scene_points_, rel_num_of_plane_points_, plane_thickness_);
-    // Check the orientation of the detected plane normal
-    if ( planeDetector.getPlaneNormal()[2] > 0.0 ) {
-      planeDetector.flipPlaneNormal();
+      // Continue if the cloud is empty
+      if(clouds_.empty()) {
+        //ROS_WARN("Point cloud empty!");
+        continue;
+      }
+
+      ROS_INFO_STREAM("Computing objects from "
+          <<scene_points_->GetNumberOfPoints()<<" points "
+          <<"between "<<(ros::Time::now() - clouds_.back()->header.stamp)
+          <<" to "<<(ros::Time::now() - clouds_.front()->header.stamp)<<" seconds after they were acquired.");
+
+      // Copy references to the stored clouds
+      cloud_full->header = clouds_.front()->header;
+
+      while(!clouds_.empty()) {
+        *cloud_full += *(clouds_.front());
+        clouds_.pop();
+      }
     }
 
-    // Get the points above the plane (the scene) and the ones below it (background)
-    planeDetector.getPointsAbovePlane(foreground_points, background_points);
+    ROS_DEBUG_STREAM("Full cloud has "<<cloud_full->points.size());
 
-  } else {
-    foreground_points = scene_points_;
+    pcl::VoxelGrid<pcl::PointXYZ> voxel_grid;
+    voxel_grid.setInputCloud(cloud_full);
+    voxel_grid.setLeafSize(downsample_voxel_size_/1000.0,downsample_voxel_size_/1000.0,downsample_voxel_size_/1000.0);
+    voxel_grid.filter(*cloud);
+
+    ROS_DEBUG_STREAM("Decimated cloud has "<<cloud->points.size());
+    
+    // Fill VTK points structure and convert units
+    // ObjRec operates in mm
+    // Reset the insertion point in the new buffer
+    scene_points_->SetNumberOfPoints(cloud->points.size());
+    scene_points_->Reset();
+
+    for (int j = 0; j < (int) cloud->points.size(); ++j) {
+      if (cloud->points[j].z < z_cuttoff_) {
+        // Add point
+        scene_points_->InsertNextPoint(
+            cloud->points[j].x * 1000.0,
+            cloud->points[j].y * 1000.0,
+            cloud->points[j].z * 1000.0);
+      } 
+    }
+
+    if(scene_points_->GetNumberOfPoints() == 0) {
+      ROS_WARN("No points!");
+      continue;
+    }
+
+    // Remove ground plane
+    vtkSmartPointer<vtkPoints> background_points(vtkPoints::New(VTK_DOUBLE));
+    vtkSmartPointer<vtkPoints> foreground_points(vtkPoints::New(VTK_DOUBLE));
+    RANSACPlaneDetector planeDetector;
+
+    if(use_only_points_above_plane_) {
+      ROS_INFO("ObjRec: Removing points not above plane...");
+
+      // Perform the plane detection
+      planeDetector.detectPlane(scene_points_, rel_num_of_plane_points_, plane_thickness_);
+      // Check the orientation of the detected plane normal
+      if ( planeDetector.getPlaneNormal()[2] > 0.0 ) {
+        planeDetector.flipPlaneNormal();
+      }
+
+      // Get the points above the plane (the scene) and the ones below it (background)
+      planeDetector.getPointsAbovePlane(foreground_points, background_points);
+
+    } else {
+      foreground_points = scene_points_;
+    }
+
+    // Detect models
+    std::list<PointSetShape*> detected_models;
+
+    ROS_INFO_STREAM("ObjRec: Attempting recognition...");
+    objrec_->doRecognition(foreground_points, success_probability_, detected_models);
+
+    ROS_INFO("ObjRec: Seconds elapsed = %.2lf \n", objrec_->getLastOverallRecognitionTimeSec());
+    ROS_INFO("ObjRec: Seconds per hypothesis = %.6lf  \n", objrec_->getLastOverallRecognitionTimeSec()
+        / (double) objrec_->getLastNumberOfCheckedHypotheses());
+
+    // Construct recognized objects message
+    objrec_msgs::RecognizedObjects objects_msg;
+    objects_msg.header = cloud->header;
+
+    for(std::list<PointSetShape*>::iterator it = detected_models.begin();
+        it != detected_models.end();
+        ++it)
+    {
+      PointSetShape *detected_model = *it;
+
+      // Construct and populate a message
+      objrec_msgs::PointSetShape pss_msg;
+      pss_msg.label = detected_model->getUserData()->getLabel();
+      pss_msg.confidence = detected_model->getConfidence();
+      array_to_pose(detected_model->getRigidTransform(), pss_msg.pose);
+
+      objects_msg.objects.push_back(pss_msg);
+      delete *it;
+    }
+
+    // Publish the visualization markers
+    this->publish_markers(objects_msg);
+
+    // Publish the recognized objects
+    objects_pub_.publish(objects_msg);
   }
-
-  // Detect models
-  std::list<PointSetShape*> detected_models;
-
-  ROS_INFO_STREAM("ObjRec: Attempting recognition...");
-  objrec_->doRecognition(foreground_points, success_probability_, detected_models);
-
-  ROS_INFO("ObjRec: Seconds elapsed = %.2lf \n", objrec_->getLastOverallRecognitionTimeSec());
-  ROS_INFO("ObjRec: Seconds per hypothesis = %.6lf  \n", objrec_->getLastOverallRecognitionTimeSec()
-      / (double) objrec_->getLastNumberOfCheckedHypotheses());
-
-  // Construct recognized objects message
-  objrec_msgs::RecognizedObjects objects_msg;
-  objects_msg.header = cloud->header;
-
-  for(std::list<PointSetShape*>::iterator it = detected_models.begin();
-      it != detected_models.end();
-      ++it)
-  {
-    PointSetShape *detected_model = *it;
-
-    // Construct and populate a message
-    objrec_msgs::PointSetShape pss_msg;
-    pss_msg.label = detected_model->getUserData()->getLabel();
-    pss_msg.confidence = detected_model->getConfidence();
-    array_to_pose(detected_model->getRigidTransform(), pss_msg.pose);
-
-    objects_msg.objects.push_back(pss_msg);
-    delete *it;
-  }
-
-  // Publish the visualization markers
-  this->publish_markers(objects_msg);
-
-  // Publish the recognized objects
-  objects_pub_.publish(objects_msg);
 }
 
 void ObjRecInterface::publish_markers(const objrec_msgs::RecognizedObjects &objects_msg)
@@ -306,7 +386,7 @@ void ObjRecInterface::publish_markers(const objrec_msgs::RecognizedObjects &obje
     marker.header = objects_msg.header;
     marker.type = visualization_msgs::Marker::MESH_RESOURCE;
     marker.action = visualization_msgs::Marker::ADD;
-    marker.lifetime = ros::Duration(1.0);
+    marker.lifetime = ros::Duration(10*it->confidence);
     marker.ns = "objrec";
     marker.id = 0;
 
@@ -314,7 +394,7 @@ void ObjRecInterface::publish_markers(const objrec_msgs::RecognizedObjects &obje
     marker.scale.y = 0.001;
     marker.scale.z = 0.001;
 
-    marker.color.a = 1.0;
+    marker.color.a = 0.75;
     marker.color.r = 1.0;
     marker.color.g = 0.1;
     marker.color.b = 0.3;
