@@ -87,7 +87,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"object_visibility",object_visibility_);
   require_param(nh,"relative_object_size",relative_object_size_);
   require_param(nh,"relative_number_of_illegal_points",relative_number_of_illegal_points_);
-  require_param(nh,"z_distance_threshold_as_voxel_size_fraction",z_distance_threshold_as_voxel_size_fraction_);
+  //require_param(nh,"z_distance_threshold_as_voxel_size_fraction",z_distance_threshold_as_voxel_size_fraction_);
   require_param(nh,"normal_estimation_radius",normal_estimation_radius_);
   require_param(nh,"intersection_fraction",intersection_fraction_);
   require_param(nh,"icp_post_processing",icp_post_processing_);
@@ -200,21 +200,19 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
   object_visibility_ = config.object_visibility;
   relative_object_size_ = config.relative_object_size;
   relative_number_of_illegal_points_ = config.relative_number_of_illegal_points;
-  z_distance_threshold_as_voxel_size_fraction_ = config.z_distance_threshold_as_voxel_size_fraction; // 1.5*params.voxelSize
+  //z_distance_threshold_as_voxel_size_fraction_ = config.z_distance_threshold_as_voxel_size_fraction; // 1.5*params.voxelSize
   normal_estimation_radius_ = config.normal_estimation_radius;
   intersection_fraction_ = config.intersection_fraction;
   //icp_post_processing_ = config.//icp_post_processing;//FIXME: this is
-  //unimplemented
   num_threads_ = config.num_threads;
 
 	objrec_->setVisibility(object_visibility_);
 	objrec_->setRelativeObjectSize(relative_object_size_);
 	objrec_->setRelativeNumberOfIllegalPoints(relative_number_of_illegal_points_);
-	objrec_->setZDistanceThreshAsVoxelSizeFraction(z_distance_threshold_as_voxel_size_fraction_); // 1.5*params.voxelSize
+	//objrec_->setZDistanceThreshAsVoxelSizeFraction(z_distance_threshold_as_voxel_size_fraction_); // 1.5*params.voxelSize
 	objrec_->setNormalEstimationRadius(normal_estimation_radius_);
 	objrec_->setIntersectionFraction(intersection_fraction_);
 	//objrec_->setICPPostProcessing(icp_post_processing_);//FIXME: this is
-  //unimplemented
 	objrec_->setNumberOfThreads(num_threads_);
 
   // Other parameters
