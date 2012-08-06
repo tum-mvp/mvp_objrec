@@ -36,8 +36,7 @@
   <param name="z_distance_threshold_as_voxel_size_fraction"   value="3.0"/>
   <param name="normal_estimation_radius"                      value="3.0"/>
   <param name="intersection_fraction"                         value="0.09"/>
-  <param name="icp_post_processing"                           value="true"/>
-  <param name="num_threads"                                   value="1"/>
+  <param name="num_threads"                                   value="3"/>
 
   <!-- Plane segmentation parameters -->
   <param name="plane_thickness"                               value="15.0"/>
@@ -45,8 +44,8 @@
 
   <!-- Other Recognition Parameters -->
   <param name="success_probability"                           value="0.99"/>
-  <param name="max_scene_z_value"                             value="1200.0"/>
-  <param name="cut_distant_scene_points"                      value="true"/>
   <param name="use_only_points_above_plane"                   value="true"/>
-
+  <param name="n_clouds_per_recognition" value="6"/>
+  <param name="z_cuttoff" value="1.2"/>
+  <param name="downsample_voxel_size" value="5"/>
 </launch>

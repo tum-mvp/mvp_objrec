@@ -87,10 +87,9 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"object_visibility",object_visibility_);
   require_param(nh,"relative_object_size",relative_object_size_);
   require_param(nh,"relative_number_of_illegal_points",relative_number_of_illegal_points_);
-  //require_param(nh,"z_distance_threshold_as_voxel_size_fraction",z_distance_threshold_as_voxel_size_fraction_);
+  require_param(nh,"z_distance_threshold_as_voxel_size_fraction",z_distance_threshold_as_voxel_size_fraction_);
   require_param(nh,"normal_estimation_radius",normal_estimation_radius_);
   require_param(nh,"intersection_fraction",intersection_fraction_);
-  require_param(nh,"icp_post_processing",icp_post_processing_);
   require_param(nh,"num_threads",num_threads_);
 
 	objrec_->setVisibility(object_visibility_);
@@ -99,8 +98,6 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
 	objrec_->setZDistanceThreshAsVoxelSizeFraction(z_distance_threshold_as_voxel_size_fraction_); // 1.5*params.voxelSize
 	objrec_->setNormalEstimationRadius(normal_estimation_radius_);
 	objrec_->setIntersectionFraction(intersection_fraction_);
-	//objrec_->setICPPostProcessing(icp_post_processing_);//FIXME: this is
-  //unimplemented
 	objrec_->setNumberOfThreads(num_threads_);
 
   // Get model info from rosparam
@@ -108,9 +105,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
 
   // Get additional parameters from ROS
   require_param(nh,"success_probability",success_probability_);
-  require_param(nh,"max_scene_z_value",max_scene_z_value_);
   require_param(nh,"use_only_points_above_plane",use_only_points_above_plane_);
-  require_param(nh,"cut_distant_scene_points",cut_distant_scene_points_);
 
   // Plane detection parameters
   require_param(nh,"plane_thickness",plane_thickness_);
@@ -200,22 +195,21 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
   object_visibility_ = config.object_visibility;
   relative_object_size_ = config.relative_object_size;
   relative_number_of_illegal_points_ = config.relative_number_of_illegal_points;
-  //z_distance_threshold_as_voxel_size_fraction_ = config.z_distance_threshold_as_voxel_size_fraction; // 1.5*params.voxelSize
+  z_distance_threshold_as_voxel_size_fraction_ = config.z_distance_threshold_as_voxel_size_fraction; // 1.5*params.voxelSize
   normal_estimation_radius_ = config.normal_estimation_radius;
   intersection_fraction_ = config.intersection_fraction;
-  //icp_post_processing_ = config.//icp_post_processing;//FIXME: this is
   num_threads_ = config.num_threads;
 
 	objrec_->setVisibility(object_visibility_);
 	objrec_->setRelativeObjectSize(relative_object_size_);
 	objrec_->setRelativeNumberOfIllegalPoints(relative_number_of_illegal_points_);
-	//objrec_->setZDistanceThreshAsVoxelSizeFraction(z_distance_threshold_as_voxel_size_fraction_); // 1.5*params.voxelSize
+	objrec_->setZDistanceThreshAsVoxelSizeFraction(z_distance_threshold_as_voxel_size_fraction_); // 1.5*params.voxelSize
 	objrec_->setNormalEstimationRadius(normal_estimation_radius_);
 	objrec_->setIntersectionFraction(intersection_fraction_);
-	//objrec_->setICPPostProcessing(icp_post_processing_);//FIXME: this is
 	objrec_->setNumberOfThreads(num_threads_);
 
   // Other parameters
+  use_only_points_above_plane_ = config.use_only_points_above_plane;
   n_clouds_per_recognition_ = config.n_clouds_per_recognition;
   publish_markers_enabled_ = config.publish_markers;
   z_cuttoff_ = config.z_cuttoff;
@@ -224,8 +218,6 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
 
 void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg)
 {
-  ROS_INFO_STREAM("Received point cloud "<<(ros::Time::now() - points_msg->header.stamp)<<" seconds after it was acquired.");
-
   // Convert to PCL cloud
   boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> > cloud(new pcl::PointCloud<pcl::PointXYZ>);
   pcl::fromROSMsg(*points_msg, *cloud);
@@ -262,7 +254,7 @@ void ObjRecInterface::recognize_objects()
 
       // Continue if the cloud is empty
       if(clouds_.empty()) {
-        //ROS_WARN("Point cloud empty!");
+        ROS_WARN("Point cloud empty!");
         continue;
       }
 
@@ -296,7 +288,7 @@ void ObjRecInterface::recognize_objects()
     scene_points_->Reset();
 
     for (int j = 0; j < (int) cloud->points.size(); ++j) {
-      if (cloud->points[j].z < z_cuttoff_) {
+      if ( cloud->points[j].z < z_cuttoff_) {
         // Add point
         scene_points_->InsertNextPoint(
             cloud->points[j].x * 1000.0,
