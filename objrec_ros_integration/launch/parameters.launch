@@ -46,6 +46,13 @@
   <param name="success_probability"                           value="0.99"/>
   <param name="use_only_points_above_plane"                   value="true"/>
   <param name="n_clouds_per_recognition" value="6"/>
-  <param name="z_cuttoff" value="1.2"/>
   <param name="downsample_voxel_size" value="5"/>
+
+  <!-- Clipping box -->
+  <param name="x_clip_min" value="-2.5"/>
+  <param name="x_clip_max" value="2.5"/>
+  <param name="y_clip_min" value="-2.5"/>
+  <param name="y_clip_max" value="2.5"/>
+  <param name="z_clip_min" value="-2.5"/>
+  <param name="z_clip_max" value="2.5"/>
 </launch>

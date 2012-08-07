@@ -66,7 +66,6 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   reconfigure_server_(nh),
   publish_markers_enabled_(false),
   n_clouds_per_recognition_(1),
-  z_cuttoff_(1.4),
   downsample_voxel_size_(3.5),
   scene_points_(vtkPoints::New(VTK_DOUBLE)),
   time_to_stop_(false)
@@ -74,8 +73,14 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   // Interface configuration
   nh.getParam("publish_markers", publish_markers_enabled_);
   nh.getParam("n_clouds_per_recognition", n_clouds_per_recognition_);
-  nh.getParam("z_cuttoff", z_cuttoff_);
   nh.getParam("downsample_voxel_size", downsample_voxel_size_);
+
+  nh.getParam("x_clip_min", x_clip_min_);
+  nh.getParam("x_clip_max", x_clip_max_);
+  nh.getParam("y_clip_min", y_clip_min_);
+  nh.getParam("y_clip_max", y_clip_max_);
+  nh.getParam("z_clip_min", z_clip_min_);
+  nh.getParam("z_clip_max", z_clip_max_);
 
   // Get construction parameters from ROS & construct object recognizer
   require_param(nh,"pair_width",pair_width_);
@@ -116,6 +121,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   pcl_cloud_sub_ = nh.subscribe("pcl_points", 1, &ObjRecInterface::pcl_cloud_cb, this);
   objects_pub_ = nh.advertise<objrec_msgs::RecognizedObjects>("recognized_objects",20);
   markers_pub_ = nh.advertise<visualization_msgs::MarkerArray>("recognized_objects_markers",20);
+  foreground_points_pub_ = nh.advertise<pcl::PointCloud<pcl::PointXYZRGB> >("foreground_points",10);
 
   // Set up dynamic reconfigure
   reconfigure_server_.setCallback(boost::bind(&ObjRecInterface::reconfigure_cb, this, _1, _2));
@@ -212,31 +218,51 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
   use_only_points_above_plane_ = config.use_only_points_above_plane;
   n_clouds_per_recognition_ = config.n_clouds_per_recognition;
   publish_markers_enabled_ = config.publish_markers;
-  z_cuttoff_ = config.z_cuttoff;
   downsample_voxel_size_ = config.downsample_voxel_size;
+
+  x_clip_min_ = config.x_clip_min;
+  x_clip_max_ = config.x_clip_max;
+  y_clip_min_ = config.y_clip_min;
+  y_clip_max_ = config.y_clip_max;
+  z_clip_min_ = config.z_clip_min;
+  z_clip_max_ = config.z_clip_max;
 }
 
 void ObjRecInterface::cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg)
 {
   // Convert to PCL cloud
-  boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> > cloud(new pcl::PointCloud<pcl::PointXYZ>);
+  boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
   pcl::fromROSMsg(*points_msg, *cloud);
 
   this->pcl_cloud_cb(cloud);
 }
 
-void ObjRecInterface::pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> > &cloud)
+void ObjRecInterface::pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > &cloud)
 {
   // Lock the buffer mutex while we're capturing a new point cloud
   boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
 
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_clipped(new pcl::PointCloud<pcl::PointXYZRGB>());
+  cloud_clipped->header = cloud->header;
+  for (int j = 0; j < (int) cloud->points.size(); ++j) {
+    if (cloud->points[j].x > x_clip_min_ && cloud->points[j].x < x_clip_max_ &&
+        cloud->points[j].y > y_clip_min_ && cloud->points[j].y < y_clip_max_ &&
+        cloud->points[j].z > z_clip_min_ && cloud->points[j].z < z_clip_max_) 
+    {
+      // Add point
+      cloud_clipped->push_back(cloud->points[j]);
+    } 
+  }
+
   // Store the cloud
-  clouds_.push(cloud);
+  clouds_.push(cloud_clipped);
 
   // Increment the cloud index
   if(clouds_.size() > (unsigned)n_clouds_per_recognition_) {
     clouds_.pop();
   }
+
+  foreground_points_pub_.publish(cloud_clipped);
 }
 
 void ObjRecInterface::recognize_objects() 
@@ -246,8 +272,8 @@ void ObjRecInterface::recognize_objects()
     ros::Duration(0.03).sleep();
 
     // Scope for syncrhonization
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_full(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_full(new pcl::PointCloud<pcl::PointXYZRGB>());
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
     {
       // Lock the buffer mutex
       boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
@@ -274,7 +300,7 @@ void ObjRecInterface::recognize_objects()
 
     ROS_DEBUG_STREAM("Full cloud has "<<cloud_full->points.size());
 
-    pcl::VoxelGrid<pcl::PointXYZ> voxel_grid;
+    pcl::VoxelGrid<pcl::PointXYZRGB> voxel_grid;
     voxel_grid.setInputCloud(cloud_full);
     voxel_grid.setLeafSize(downsample_voxel_size_/1000.0,downsample_voxel_size_/1000.0,downsample_voxel_size_/1000.0);
     voxel_grid.filter(*cloud);
@@ -287,18 +313,17 @@ void ObjRecInterface::recognize_objects()
     scene_points_->SetNumberOfPoints(cloud->points.size());
     scene_points_->Reset();
 
+    // Require the points are inside of the clopping box
     for (int j = 0; j < (int) cloud->points.size(); ++j) {
-      if ( cloud->points[j].z < z_cuttoff_) {
-        // Add point
-        scene_points_->InsertNextPoint(
-            cloud->points[j].x * 1000.0,
-            cloud->points[j].y * 1000.0,
-            cloud->points[j].z * 1000.0);
-      } 
+      // Add point
+      scene_points_->InsertNextPoint(
+          cloud->points[j].x * 1000.0,
+          cloud->points[j].y * 1000.0,
+          cloud->points[j].z * 1000.0);
     }
 
     if(scene_points_->GetNumberOfPoints() == 0) {
-      ROS_WARN("No points!");
+      ROS_WARN("No foreground points!");
       continue;
     }
 
@@ -306,6 +331,7 @@ void ObjRecInterface::recognize_objects()
     vtkSmartPointer<vtkPoints> background_points(vtkPoints::New(VTK_DOUBLE));
     vtkSmartPointer<vtkPoints> foreground_points(vtkPoints::New(VTK_DOUBLE));
     RANSACPlaneDetector planeDetector;
+    //double plane_normal[3], plane_points[3][3];
 
     if(use_only_points_above_plane_) {
       ROS_INFO("ObjRec: Removing points not above plane...");
@@ -317,9 +343,12 @@ void ObjRecInterface::recognize_objects()
         planeDetector.flipPlaneNormal();
       }
 
+      // Get plane normal for visualization
+      //plane_normal = planeDetector.getPlaneNormal();
+      //planeDetector.getPlanePoints(plane_points[0],plane_points[1],plane_points[2]);
+
       // Get the points above the plane (the scene) and the ones below it (background)
       planeDetector.getPointsAbovePlane(foreground_points, background_points);
-
     } else {
       foreground_points = scene_points_;
     }
@@ -359,6 +388,18 @@ void ObjRecInterface::recognize_objects()
 
     // Publish the recognized objects
     objects_pub_.publish(objects_msg);
+
+    // Publish the points used in the scan, for debugging
+    /**
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr foreground_points_pcl(new pcl::PointCloud<pcl::PointXYZRGB>());
+    foreground_points_pcl->header = cloud->header;
+    for(unsigned int i=0; i<foreground_points->GetNumberOfPoints(); i++) {
+      double point[3];
+      foreground_points->GetPoint(i,point);
+      foreground_points_pcl->push_back(pcl::PointXYZ(point[0]/1000.0,point[1]/1000.0,point[2]/1000.0));
+    }
+    foreground_points_pub_.publish(foreground_points_pcl);
+    **/
   }
 }
 

@@ -44,7 +44,7 @@ namespace objrec_ros_integration {
     void reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t level);
 
     void cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg);
-    void pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> > &points_msg);
+    void pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > &points_msg);
     void recognize_objects();
     void publish_markers(const objrec_msgs::RecognizedObjects &msg);
 
@@ -54,6 +54,7 @@ namespace objrec_ros_integration {
     ros::Subscriber pcl_cloud_sub_;
     ros::Publisher objects_pub_;
     ros::Publisher markers_pub_;
+    ros::Publisher foreground_points_pub_;
 
     // ROS Dynamic Reconfigure
     dynamic_reconfigure::Server<objrec_msgs::ObjRecConfig> reconfigure_server_;
@@ -61,8 +62,14 @@ namespace objrec_ros_integration {
     // ROS Interface parameters
     bool publish_markers_enabled_;
     int n_clouds_per_recognition_;
-    double z_cuttoff_;
     double downsample_voxel_size_;
+
+    double x_clip_min_;
+    double x_clip_max_;
+    double y_clip_min_;
+    double y_clip_max_;
+    double z_clip_min_;
+    double z_clip_max_;
 
     // ObjRec structure
     boost::scoped_ptr<ObjRecRANSAC> objrec_;
@@ -78,7 +85,7 @@ namespace objrec_ros_integration {
     // Mutex for managing buffery synchronization
     boost::mutex buffer_mutex_;
     bool time_to_stop_;
-    std::queue<boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> > > clouds_;
+    std::queue<boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > > clouds_;
     boost::scoped_ptr<boost::thread> recognition_thread_;
 
     // ObjRec parameters (all in millimeter)
