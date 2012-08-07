@@ -279,8 +279,10 @@ void ObjRecInterface::recognize_objects()
       boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
 
       // Continue if the cloud is empty
+      static ros::Rate warn_rate(1.0);
       if(clouds_.empty()) {
-        ROS_WARN("Point cloud empty!");
+        ROS_WARN("Pointcloud buffer is empty!");
+        warn_rate.sleep();
         continue;
       }
 
