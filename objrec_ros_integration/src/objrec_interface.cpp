@@ -67,6 +67,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   publish_markers_enabled_(false),
   n_clouds_per_recognition_(1),
   downsample_voxel_size_(3.5),
+  confidence_time_multiplier_(30),
   scene_points_(vtkPoints::New(VTK_DOUBLE)),
   time_to_stop_(false)
 {
@@ -219,6 +220,7 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
   n_clouds_per_recognition_ = config.n_clouds_per_recognition;
   publish_markers_enabled_ = config.publish_markers;
   downsample_voxel_size_ = config.downsample_voxel_size;
+  confidence_time_multiplier_ = config.confidence_time_multiplier;
 
   x_clip_min_ = config.x_clip_min;
   x_clip_max_ = config.x_clip_max;
@@ -419,7 +421,7 @@ void ObjRecInterface::publish_markers(const objrec_msgs::RecognizedObjects &obje
     marker.header = objects_msg.header;
     marker.type = visualization_msgs::Marker::MESH_RESOURCE;
     marker.action = visualization_msgs::Marker::ADD;
-    marker.lifetime = ros::Duration(10*it->confidence);
+    marker.lifetime = ros::Duration(confidence_time_multiplier_*it->confidence);
     marker.ns = "objrec";
     marker.id = 0;
 

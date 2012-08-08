@@ -63,6 +63,7 @@ namespace objrec_ros_integration {
     bool publish_markers_enabled_;
     int n_clouds_per_recognition_;
     double downsample_voxel_size_;
+    double confidence_time_multiplier_;
 
     double x_clip_min_;
     double x_clip_max_;
