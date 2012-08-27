@@ -24,21 +24,26 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 FIND_PACKAGE(VTK REQUIRED)
 INCLUDE(${VTK_USE_FILE})
 
-rosbuild_add_executable(vtk_to_stl src/vtk_to_stl.cpp)
+add_executable(vtk_to_stl src/vtk_to_stl.cpp)
 target_link_libraries(vtk_to_stl vtkHybrid)
 
 rosbuild_add_library(${PROJECT_NAME} src/objrec_interface.cpp src/objrec_nodelet.cpp)
-target_link_libraries(${PROJECT_NAME}  ${VTK_LIBS} vtkHybrid)
 
-rosbuild_add_executable(objrec_node src/objrec_node.cpp)
-target_link_libraries(objrec_node ${PROJECT_NAME} ) 
-
-rosbuild_find_ros_package(objrec_cuda)
 rosbuild_find_ros_package(cuda)
 include(${cuda_PACKAGE_PATH}/roscuda.cmake)
 
-roscuda_add_executable(objrec_node_cuda 
-  src/objrec_node.cpp
-  ${objrec_cuda_PACKAGE_PATH}/ObjRecRANSAC/src/ObjRecRANSAC/AcceptHypothesisAlgo.cu
-  )
-target_link_libraries(objrec_node_cuda ${PROJECT_NAME} ) 
+if(CUDA_FOUND)
+  rosbuild_find_ros_package(objrec_cuda)
+  roscuda_add_executable(objrec_node
+    src/objrec_node.cpp
+    ${objrec_cuda_PACKAGE_PATH}/ObjRecRANSAC/src/ObjRecRANSAC/AcceptHypothesisAlgo.cu
+    )
+else()
+  target_link_libraries(${PROJECT_NAME}  ${VTK_LIBS} vtkHybrid)
+
+  rosbuild_add_executable(objrec_node src/objrec_node.cpp)
+endif()
+
+target_link_libraries(objrec_node ${PROJECT_NAME} ) 
+
+
