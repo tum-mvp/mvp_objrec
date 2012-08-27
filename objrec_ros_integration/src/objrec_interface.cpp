@@ -18,7 +18,6 @@
 #include <ros/exceptions.h>
 
 #include <tf/tf.h>
-#include <tf/transform_listener.h>
 #include <geometry_msgs/Pose.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -64,6 +63,7 @@ using namespace objrec_ros_integration;
 
 ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   nh_(nh),
+  listener_(nh, ros::Duration(20.0)),
   reconfigure_server_(nh),
   publish_markers_enabled_(false),
   n_clouds_per_recognition_(1),
@@ -373,8 +373,6 @@ void ObjRecInterface::recognize_objects()
     objects_msg.header.stamp = cloud->header.stamp;
     objects_msg.header.frame_id = "/world";//cloud->header;
 
-    static tf::TransformListener listener;
-
     for(std::list<PointSetShape*>::iterator it = detected_models.begin();
         it != detected_models.end();
         ++it)
@@ -393,14 +391,12 @@ void ObjRecInterface::recognize_objects()
       pose_stamped_in.pose = pss_msg.pose;
 
       try {
-        listener.transformPose("/world",pose_stamped_in,pose_stamped_out);
+        listener_.transformPose("/world",pose_stamped_in,pose_stamped_out);
         pss_msg.pose = pose_stamped_out.pose;
       }
       catch (tf::TransformException ex){
         ROS_WARN("Not transforming recognized objects into world frame: %s",ex.what());
-        continue;
       }
-
 
       objects_msg.objects.push_back(pss_msg);
       delete *it;

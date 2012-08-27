@@ -28,6 +28,7 @@
 #include <objrec_msgs/ObjRecConfig.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
+#include <tf/transform_listener.h>
 
 namespace objrec_ros_integration {
   class ObjRecInterface {
@@ -55,6 +56,7 @@ namespace objrec_ros_integration {
     ros::Publisher objects_pub_;
     ros::Publisher markers_pub_;
     ros::Publisher foreground_points_pub_;
+    tf::TransformListener listener_;
 
     // ROS Dynamic Reconfigure
     dynamic_reconfigure::Server<objrec_msgs::ObjRecConfig> reconfigure_server_;
