@@ -13,13 +13,14 @@
   <depend package="tf"/>
   <depend package="geometry_msgs"/>
   <depend package="visualization_msgs"/>
-  <depend package="objrec_core"/>
   <depend package="sensor_msgs"/>
   <depend package="pcl_ros"/>
-  <depend package="objrec_msgs"/>
   <depend package="resource_retriever"/>
   <depend package="dynamic_reconfigure"/>
   <depend package="nodelet"/>
+
+  <depend package="objrec_msgs"/>
+  <depend package="objrec_core"/>
 
   <export>
     <nodelet plugin="${prefix}/plugins/nodelet_plugins.xml" />
