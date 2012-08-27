@@ -18,6 +18,7 @@
 #include <ros/exceptions.h>
 
 #include <tf/tf.h>
+#include <tf/transform_listener.h>
 #include <geometry_msgs/Pose.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -369,7 +370,10 @@ void ObjRecInterface::recognize_objects()
 
     // Construct recognized objects message
     objrec_msgs::RecognizedObjects objects_msg;
-    objects_msg.header = cloud->header;
+    objects_msg.header.stamp = cloud->header.stamp;
+    objects_msg.header.frame_id = "/world";//cloud->header;
+
+    static tf::TransformListener listener;
 
     for(std::list<PointSetShape*>::iterator it = detected_models.begin();
         it != detected_models.end();
@@ -382,6 +386,21 @@ void ObjRecInterface::recognize_objects()
       pss_msg.label = detected_model->getUserData()->getLabel();
       pss_msg.confidence = detected_model->getConfidence();
       array_to_pose(detected_model->getRigidTransform(), pss_msg.pose);
+
+      // Transform into the world frame TODO: make this frame a parameter
+      geometry_msgs::PoseStamped pose_stamped_in, pose_stamped_out;
+      pose_stamped_in.header = cloud->header;
+      pose_stamped_in.pose = pss_msg.pose;
+
+      try {
+        listener.transformPose("/world",pose_stamped_in,pose_stamped_out);
+        pss_msg.pose = pose_stamped_out.pose;
+      }
+      catch (tf::TransformException ex){
+        ROS_WARN("Not transforming recognized objects into world frame: %s",ex.what());
+        continue;
+      }
+
 
       objects_msg.objects.push_back(pss_msg);
       delete *it;
