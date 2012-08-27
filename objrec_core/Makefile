@@ -5,6 +5,16 @@ OBJREC_LIB_PATH=$(OBJREC_PKG_PATH)/lib
 
 default:=all
 
+cuda:
+	mkdir -p $(OBJREC_BUILD_DIR)
+	cd $(OBJREC_BUILD_DIR)  && cmake .. -DUSE_CUDA:BOOL=True -DCMAKE_BUILD_TYPE=Debug && make $(ROS_PARALLEL_JOBS)
+	mkdir -p $(OBJREC_LIB_PATH)
+	cp $(OBJREC_BUILD_DIR)/src/BasicTools/libBasicTools.* $(OBJREC_LIB_PATH)
+	cp $(OBJREC_BUILD_DIR)/src/BasicToolsL1/libBasicToolsL1.* $(OBJREC_LIB_PATH)
+	cp $(OBJREC_BUILD_DIR)/src/ObjRecRANSAC/libObjRecRANSAC.* $(OBJREC_LIB_PATH)
+	cp $(OBJREC_BUILD_DIR)/src/VtkBasics/libVtkBasics.* $(OBJREC_LIB_PATH)	
+
+
 all: ObjRecRANSAC
 	mkdir -p $(OBJREC_BUILD_DIR)
 	cd $(OBJREC_BUILD_DIR)  && cmake .. -DCMAKE_BUILD_TYPE=Debug && make $(ROS_PARALLEL_JOBS)
