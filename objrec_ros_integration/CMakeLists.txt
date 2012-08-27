@@ -33,10 +33,10 @@ rosbuild_find_ros_package(cuda)
 include(${cuda_PACKAGE_PATH}/roscuda.cmake)
 
 if(CUDA_FOUND)
-  rosbuild_find_ros_package(objrec_cuda)
+  rosbuild_find_ros_package(objrec_core)
   roscuda_add_executable(objrec_node
     src/objrec_node.cpp
-    ${objrec_cuda_PACKAGE_PATH}/ObjRecRANSAC/src/ObjRecRANSAC/AcceptHypothesisAlgo.cu
+    ${objrec_core_PACKAGE_PATH}/ObjRecRANSAC/src/ObjRecRANSAC/AcceptHypothesisAlgo.cu
     )
 else()
   target_link_libraries(${PROJECT_NAME}  ${VTK_LIBS} vtkHybrid)
