@@ -33,6 +33,9 @@ rosbuild_find_ros_package(cuda)
 include(${cuda_PACKAGE_PATH}/roscuda.cmake)
 
 if(CUDA_FOUND)
+  add_definitions(-DUSE_CUDA)
+  add_definitions(-DCUDA_DEVICE_ID=1 )
+
   rosbuild_find_ros_package(objrec_core)
   roscuda_add_executable(objrec_node
     src/objrec_node.cpp
