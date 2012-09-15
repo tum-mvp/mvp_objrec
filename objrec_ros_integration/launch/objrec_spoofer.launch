@@ -1,0 +1,11 @@
+<launch>
+  <node pkg="objrec_ros_integration" type="objrec_spoofer.py" name="objrec_spoofer">
+    <rosparam>
+      spoofed_objects:
+        - {label: 'Amicelli', confidence: 0.5, position: [0,0,0], orientation: [0,0,0,1]}
+        - {label: 'Amicelli', confidence: 0.5, position: [0.5,0,0], orientation: [0,0,0,1]}
+        - {label: 'Soda_Club_Bottle', confidence: 0.5, position: [0,0.2,0], orientation: [0,0,0,1]}
+    </rosparam>
+  </node>
+  <include ns="objrec_spoofer" file="$(find objrec_ros_integration)/launch/models.launch"/>
+</launch>
