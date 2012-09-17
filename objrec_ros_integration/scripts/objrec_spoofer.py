@@ -15,14 +15,14 @@ def main():
 
     # Get spoofer parameters
     frame_id = rospy.get_param('~frame_id','/world')
-    publish_period = rospy.get_param('~publish_period',0.1)
+    publish_period = rospy.get_param('~publish_period',1.0)
     publish_rate = rospy.Rate(1.0/publish_period)
 
     # Get the model info
     models = rospy.get_param('~models')
     stl_uris = {}
     for model in models:
-        stl_uris[model] = rospy.get_param('~model_uris/'+model)
+        stl_uris[model] = rospy.get_param('~stl_uris/'+model)
 
     # Get objects from rosparam
     spoofed_objects = rospy.get_param('~spoofed_objects')
@@ -59,7 +59,7 @@ def main():
             marker.action = visualization_msgs.Marker.ADD
             marker.lifetime = rospy.Duration(publish_period)
             marker.scale = geometry_msgs.Vector3(0.001, 0.001, 0.001)
-            marker.color = std_msgs.ColorRGBA(0.75, 1.0, 0.1, 0.3)
+            marker.color = std_msgs.ColorRGBA(1.0, 0.2, 0.4, 0.5)
 
             marker.id = marker_id
             marker.pose = pss_msg.pose
