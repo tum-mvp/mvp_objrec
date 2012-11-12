@@ -1,0 +1,143 @@
+diff -r 7e7ee8c6c0da CMakeLists.txt
+--- a/CMakeLists.txt	Mon Jul 30 19:16:17 2012 +0200
++++ b/CMakeLists.txt	Mon Aug 06 15:33:35 2012 +0200
+@@ -31,10 +31,10 @@
+ 	${OpenCV_LIB_DIR}
+ )
+ 
++link_libraries(ObjRecRANSAC BasicToolsL1 BasicTools VtkBasics vtkIO vtkCommon vtkRendering ${OpenCV_LIBS})
++
+ if(CMAKE_COMPILER_IS_GNUCXX)
+     set(CMAKE_CXX_FLAGS "-Wno-deprecated -mfpmath=sse -msse -msse2 -msse3 -mssse3 -msse4.1 -O3")
+ endif()
+ 
+-link_libraries(ObjRecRANSAC BasicToolsL1 BasicTools VtkBasics vtkIO vtkCommon vtkRendering ${OpenCV_LIBS})
+-
+ add_executable(ObjRecRANSACRun ./main.cpp)
+diff -r 7e7ee8c6c0da src/BasicTools/CMakeLists.txt
+--- a/src/BasicTools/CMakeLists.txt	Mon Jul 30 19:16:17 2012 +0200
++++ b/src/BasicTools/CMakeLists.txt	Mon Aug 06 15:33:35 2012 +0200
+@@ -15,6 +15,7 @@
+ FILE(GLOB _CG_DS_BSP_   ComputationalGeometry/DataStructures/BSPTree/*.cpp)
+ FILE(GLOB _CG_DS_KD_    ComputationalGeometry/DataStructures/KdTree/*.cpp)
+ FILE(GLOB _CG_DS_OCT_   ComputationalGeometry/DataStructures/Octree/*.cpp)
++FILE(GLOB _ORR_DS_      DataStructures/*.cpp)
+ FILE(GLOB _GRAPH_       Graph/*.cpp)
+ FILE(GLOB _LA_          LinearAlgebra/*.cpp)
+ FILE(GLOB _STOCH_       Stochastics/*.cpp)
+@@ -29,16 +30,33 @@
+     set(CMAKE_CXX_FLAGS "-Wno-deprecated -mfpmath=sse -msse -msse2 -msse3 -mssse3 -msse4.1 -O3")
+ endif()
+ 
+-add_library(BasicTools STATIC
++add_library(BasicTools SHARED
+ 	@_AUX_@
+ 	@_CG_ALGS_@
+ 	@_CG_DS_@
+ 	@_CG_DS_BSP_@
+ 	@_CG_DS_KD_@
+ 	@_CG_DS_OCT_@
++  @_ORR_DS_@
+ 	@_GRAPH_@
+ 	@_LA_@
+ 	@_STOCH_@
+ 	@_MYVTK_@
+ )
++target_link_libraries(BasicTools vtkRendering)
+ 
++add_library(BasicToolsStatic STATIC
++	@_AUX_@
++	@_CG_ALGS_@
++	@_CG_DS_@
++	@_CG_DS_BSP_@
++	@_CG_DS_KD_@
++	@_CG_DS_OCT_@
++  @_ORR_DS_@
++	@_GRAPH_@
++	@_LA_@
++	@_STOCH_@
++	@_MYVTK_@
++)
++set_target_properties(BasicToolsStatic PROPERTIES OUTPUT_NAME BasicTools)
++
+diff -r 7e7ee8c6c0da src/BasicToolsL1/CMakeLists.txt
+--- a/src/BasicToolsL1/CMakeLists.txt	Mon Jul 30 19:16:17 2012 +0200
++++ b/src/BasicToolsL1/CMakeLists.txt	Mon Aug 06 15:33:35 2012 +0200
+@@ -8,8 +8,13 @@
+     set(CMAKE_CXX_FLAGS "-Wno-deprecated -mfpmath=sse -msse -msse2 -msse3 -mssse3 -msse4.1 -O3")
+ endif()
+ 
+-add_library(BasicToolsL1 STATIC
++add_library(BasicToolsL1 SHARED
+ 	@_BTL1_CUR_@
+ 	@_BTL1_EIG3x3_@
+ )
++add_library(BasicToolsL1Static STATIC
++	@_BTL1_CUR_@
++	@_BTL1_EIG3x3_@
++)
++set_target_properties(BasicToolsL1Static PROPERTIES OUTPUT_NAME BasicToolsL1)
+ 
+diff -r 7e7ee8c6c0da src/ObjRecRANSAC/CMakeLists.txt
+--- a/src/ObjRecRANSAC/CMakeLists.txt	Mon Jul 30 19:16:17 2012 +0200
++++ b/src/ObjRecRANSAC/CMakeLists.txt	Mon Aug 06 15:33:35 2012 +0200
+@@ -8,7 +8,6 @@
+ If VTK is installed but cmake can not find it, set the VTK_DIR entry to the folder which contains the file VTKConfig.cmake")
+ ENDIF(NOT VTK_FOUND)
+ 
+-
+ FILE(GLOB _ORR_CUR_     *.cpp)
+ FILE(GLOB _ORR_ALGS_    Algorithms/*.cpp)
+ FILE(GLOB _ORR_DS_      DataStructures/*.cpp)
+@@ -21,6 +20,7 @@
+ 
+ include_directories(
+ 	${VTK_INCLUDE_DIRS}
++  ${OpenCV_INCLUDE_DIRS}
+ 	..
+ )
+ 
+@@ -28,7 +28,7 @@
+     set(CMAKE_CXX_FLAGS "-Wno-deprecated -mfpmath=sse -msse -msse2 -msse3 -mssse3 -msse4.1 -O3")
+ endif()
+ 
+-add_library(ObjRecRANSAC STATIC
++add_library(ObjRecRANSAC SHARED
+ 	@_ORR_CUR_@
+ 	@_ORR_ALGS_@
+ 	@_ORR_DS_@
+@@ -39,4 +39,18 @@
+ 	@_ORR_DS_RI_@
+ 	@_ORR_SH_@
+ )
++target_link_libraries(ObjRecRANSAC ${OpenCV_LIBS} BasicTools BasicToolsL1)
+ 
++add_library(ObjRecRANSACStatic STATIC
++	@_ORR_CUR_@
++	@_ORR_ALGS_@
++	@_ORR_DS_@
++	@_ORR_DS_HTBS_@
++	@_ORR_DS_HTKT_@
++	@_ORR_DS_OKD_@
++	@_ORR_DS_ORRO_@
++	@_ORR_DS_RI_@
++	@_ORR_SH_@
++)
++set_target_properties(ObjRecRANSACStatic PROPERTIES OUTPUT_NAME ObjRecRANSAC)
++
+diff -r 7e7ee8c6c0da src/VtkBasics/CMakeLists.txt
+--- a/src/VtkBasics/CMakeLists.txt	Mon Jul 30 19:16:17 2012 +0200
++++ b/src/VtkBasics/CMakeLists.txt	Mon Aug 06 15:33:35 2012 +0200
+@@ -19,7 +19,10 @@
+     set(CMAKE_CXX_FLAGS "-Wno-deprecated -mfpmath=sse -msse -msse2 -msse3 -mssse3 -msse4.1 -O3")
+ endif()
+ 
+-add_library(VtkBasics STATIC
++add_library(VtkBasics SHARED
+ 	@_VTK_@
+ )
+-
++add_library(VtkBasicsStatic STATIC
++  @_VTK_@
++)
++set_target_properties(VtkBasicsStatic PROPERTIES OUTPUT_NAME VtkBasics)
