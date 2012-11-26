@@ -34,7 +34,8 @@ debug: ObjRecRANSAC
 	cp $(OBJREC_BUILD_DIR)/src/VtkBasics/libVtkBasics.* $(OBJREC_LIB_PATH)	
 
 ObjRecRANSAC:
-	cd $(OBJREC_PKG_PATH) && tar -xf *.tar
+	#cd $(OBJREC_PKG_PATH) && tar -xf *.tar
+	cd $(OBJREC_PKG_PATH) && unzip *.zip
 
 clean:
 	rm -rf ObjRecRANSAC/build
