@@ -13,7 +13,7 @@ all: cpu
 	cd $(OBJREC_PKG_PATH) && wget $(TARBALL_BASE_URI)/$@
 
 ObjRecRANSA%: ObjRecRANSA%_$(TARBALL_VERSION).tgz
-	cd $(OBJREC_PKG_PATH) && tar -xf $<.tgz
+	cd $(OBJREC_PKG_PATH) && tar -xf $<
 
 
 
@@ -49,5 +49,6 @@ debug: ObjRecRANSAC
 
 clean:
 	rm -rf ObjRecRANSAC/build
+	rm -rf ObjRecRANSAC_CUDA/build
 	rm -rf libs
 
