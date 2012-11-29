@@ -4,16 +4,18 @@
 OBJREC_PKG_PATH=$(shell rospack find objrec_core)
 OBJREC_LIB_PATH=$(OBJREC_PKG_PATH)/lib
 
+TARBALL_BASE_URI=https://github.com/downloads/tum-mvp/mvp_objrec
+
 all: cpu
 
 ObjRecRANSAC_CUDA.tgz: 
-	cd $(OBJREC_PKG_PATH) && wget https://github.com/downloads/jhu-lcsr/mvp_objrec/ObjRecRANSAC_CUDA_v1.1.tgz -O ObjRecRANSAC_CUDA.tgz
+	cd $(OBJREC_PKG_PATH) && wget $(TARBALL_BASE_URI)/ObjRecRANSAC_CUDA_v1.1.tgz 
 
 ObjRecRANSAC_CUDA: ObjRecRANSAC_CUDA.tgz
 	cd $(OBJREC_PKG_PATH) && tar -xf *.tgz
 
 ObjRecRANSAC.tgz: 
-	cd $(OBJREC_PKG_PATH) && wget https://github.com/downloads/jhu-lcsr/mvp_objrec/ObjRecRANSAC_v1.1.tgz -O ObjRecRANSAC.zip
+	cd $(OBJREC_PKG_PATH) && wget $(TARBALL_BASE_URI)/ObjRecRANSAC_v1.1.tgz
 
 ObjRecRANSAC: ObjRecRANSAC.tgz
 	cd $(OBJREC_PKG_PATH) && tar -xf *.tgz
