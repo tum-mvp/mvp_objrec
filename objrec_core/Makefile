@@ -7,8 +7,6 @@ OBJREC_LIB_PATH=$(OBJREC_PKG_PATH)/lib
 TARBALL_BASE_URI=https://github.com/downloads/tum-mvp/mvp_objrec
 TARBALL_VERSION=v1.1
 
-
-
 all: cpu
 
 %.tgz: 
