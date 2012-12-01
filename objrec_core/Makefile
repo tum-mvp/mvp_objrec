@@ -17,6 +17,7 @@ all: cpu
 
 $(OBJREC_SOURCE_DIR): ObjRecRANSAC-$(TARBALL_VERSION).tgz
 	cd $(OBJREC_PKG_PATH) && tar -xf $<
+	ln -s $(OBJREC_SOURCE_DIR) ObjRecRANSAC
 
 cuda: $(OBJREC_SOURCE_DIR)
 	mkdir -p $(OBJREC_BUILD_DIR)
@@ -26,6 +27,7 @@ cuda: $(OBJREC_SOURCE_DIR)
 	cp $(OBJREC_BUILD_DIR)/src/BasicToolsL1/libBasicToolsL1.* $(OBJREC_LIB_PATH)
 	cp $(OBJREC_BUILD_DIR)/src/ObjRecRANSAC/libObjRecRANSAC.* $(OBJREC_LIB_PATH)
 	cp $(OBJREC_BUILD_DIR)/src/VtkBasics/libVtkBasics.* $(OBJREC_LIB_PATH)	
+	touch ROS_NOBUILD
 
 cpu: $(OBJREC_SOURCE_DIR)
 	mkdir -p $(OBJREC_BUILD_DIR)
@@ -35,6 +37,7 @@ cpu: $(OBJREC_SOURCE_DIR)
 	cp $(OBJREC_BUILD_DIR)/src/BasicToolsL1/libBasicToolsL1.* $(OBJREC_LIB_PATH)
 	cp $(OBJREC_BUILD_DIR)/src/ObjRecRANSAC/libObjRecRANSAC.* $(OBJREC_LIB_PATH)
 	cp $(OBJREC_BUILD_DIR)/src/VtkBasics/libVtkBasics.* $(OBJREC_LIB_PATH)	
+	touch ROS_NOBUILD
 
 debug: $(OBJREC_SOURCE_DIR)
 	mkdir -p $(OBJREC_BUILD_DIR)
@@ -44,9 +47,11 @@ debug: $(OBJREC_SOURCE_DIR)
 	cp $(OBJREC_BUILD_DIR)/src/BasicToolsL1/libBasicToolsL1.* $(OBJREC_LIB_PATH)
 	cp $(OBJREC_BUILD_DIR)/src/ObjRecRANSAC/libObjRecRANSAC.* $(OBJREC_LIB_PATH)
 	cp $(OBJREC_BUILD_DIR)/src/VtkBasics/libVtkBasics.* $(OBJREC_LIB_PATH)	
+	touch ROS_NOBUILD
 
 clean:
 	rm -rf ObjRecRANSAC/build
 	rm -rf ObjRecRANSAC_CUDA/build
 	rm -rf libs
+	rm ROS_NOBUILD
 
