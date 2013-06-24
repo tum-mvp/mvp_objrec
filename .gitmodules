@@ -1,0 +1,3 @@
+[submodule "objrec_core/ObjRecRANSAC"]
+	path = objrec_core/ObjRecRANSAC
+	url = git@github.com:tum-mvp/ObjRecRANSAC.git
