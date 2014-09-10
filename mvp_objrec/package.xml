@@ -1,0 +1,34 @@
+<package>
+  <name>mvp_objrec</name>
+  <version>0.1.0</version>
+  <description>RANSAC-Based object recognition</description>
+  <maintainer email="papazov@in.tum.de">Chavdar Papazov</maintainer>
+
+  <license>Research Purposes Only</license>
+  <license>NOT FOR REDISTRIBUTION</license>
+
+  <url type="website"></url>
+  <!-- <url type="bugtracker"></url> -->
+
+  <author email="papazov@in.tum.de">Chavdar Papazov</author>
+
+  <!-- Dependencies which this package needs to build itself. -->
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- Dependencies needed to compile this package. -->
+
+
+  <!-- Dependencies needed after this package is compiled. -->
+  <run_depend>objrec_ros_integration</run_depend>
+  <run_depend>objrec_msgs</run_depend>
+  <run_depend>cuda</run_depend>
+
+  <!-- Dependencies needed only for running tests. -->
+
+
+
+
+
+
+
+</package>

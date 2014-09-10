@@ -1,52 +1,48 @@
-cmake_minimum_required(VERSION 2.4.6)
-include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
+# Catkin User Guide: http://www.ros.org/doc/groovy/api/catkin/html/user_guide/user_guide.html
+# Catkin CMake Standard: http://www.ros.org/doc/groovy/api/catkin/html/user_guide/standards.html
+cmake_minimum_required(VERSION 2.8.3)
+project(objrec_ros_integration)
+# Load catkin and all dependencies required for this package
+# TODO: remove all from COMPONENTS that are not catkin packages.
+find_package(catkin REQUIRED COMPONENTS roscpp tf geometry_msgs
+  visualization_msgs sensor_msgs pcl_ros pcl_conversions resource_retriever
+  dynamic_reconfigure nodelet objrec_msgs)
 
-# Set the build type.  Options are:
-#  Coverage       : w/ debug symbols, w/o optimization, w/ code-coverage
-#  Debug          : w/ debug symbols, w/o optimization
-#  Release        : w/o debug symbols, w/ optimization
-#  RelWithDebInfo : w/ debug symbols, w/ optimization
-#  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
-#set(ROS_BUILD_TYPE RelWithDebInfo)
-
-rosbuild_init()
-
-#set the default path for built executables to the "bin" directory
-set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
-#set the default path for built libraries to the "lib" directory
-set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
-
-#uncomment if you have defined messages
-#rosbuild_genmsg()
-#uncomment if you have defined services
-#rosbuild_gensrv()
-
-FIND_PACKAGE(VTK REQUIRED)
-INCLUDE(${VTK_USE_FILE})
+# Build vtk-stl converter
+find_package(VTK REQUIRED)
+include(${VTK_USE_FILE})
 
 add_executable(vtk_to_stl src/vtk_to_stl.cpp)
 target_link_libraries(vtk_to_stl vtkHybrid)
 
-rosbuild_add_library(${PROJECT_NAME} src/objrec_interface.cpp src/objrec_nodelet.cpp)
+# Add objrec nodelet
+include_directories(include ${catkin_INCLUDE_DIRS})
 
-rosbuild_find_ros_package(cuda)
-include(${cuda_PACKAGE_PATH}/roscuda.cmake)
+FIND_PACKAGE(CUDA)
 
+# Add objrec node
 if(CUDA_FOUND)
   add_definitions(-DUSE_CUDA)
-  add_definitions(-DCUDA_DEVICE_ID=1 )
-
-  rosbuild_find_ros_package(objrec_core)
-  roscuda_add_executable(objrec_node
-    src/objrec_node.cpp
-    ${objrec_core_PACKAGE_PATH}/ObjRecRANSAC/src/ObjRecRANSAC/AcceptHypothesisAlgo.cu
-    )
+  cuda_add_library(objrecransac_interface src/objrec_interface.cpp)
+  cuda_add_library(objrecransac_nodelet src/objrec_nodelet.cpp)
+  cuda_add_executable(objrec_node src/objrec_node.cpp)
 else()
-  target_link_libraries(${PROJECT_NAME}  ${VTK_LIBS} vtkHybrid)
-
-  rosbuild_add_executable(objrec_node src/objrec_node.cpp)
+  add_library(objrecransac_interface src/objrec_interface.cpp)
+  add_library(objrecransac_nodelet src/objrec_nodelet.cpp)
+  add_executable(objrec_node src/objrec_node.cpp)
 endif()
 
-target_link_libraries(objrec_node ${PROJECT_NAME} ) 
+find_library(ObjRecRANSAC_LIBRARY ObjRecRANSAC)
 
+target_link_libraries(objrecransac_interface ${ObjRecRANSAC_LIBRARY} ${VTK_LIBS} vtkHybrid ${catkin_LIBRARIES})
+target_link_libraries(objrecransac_nodelet objrecransac_interface)
+target_link_libraries(objrec_node objrecransac_interface) 
 
+# catkin_package parameters: http://ros.org/doc/groovy/api/catkin/html/dev_guide/generated_cmake_api.html#catkin-package
+# TODO: fill in what other packages will need to use this package
+catkin_package(
+    DEPENDS roscpp tf geometry_msgs visualization_msgs sensor_msgs pcl_ros resource_retriever dynamic_reconfigure nodelet objrec_msgs objrec_core
+    CATKIN_DEPENDS # TODO
+    INCLUDE_DIRS include
+    LIBRARIES # TODO
+)

@@ -22,6 +22,7 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <sensor_msgs/PointCloud2.h>
 
+#include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
@@ -291,8 +292,8 @@ void ObjRecInterface::recognize_objects()
 
       ROS_INFO_STREAM("Computing objects from "
           <<scene_points_->GetNumberOfPoints()<<" points "
-          <<"between "<<(ros::Time::now() - clouds_.back()->header.stamp)
-          <<" to "<<(ros::Time::now() - clouds_.front()->header.stamp)<<" seconds after they were acquired.");
+          <<"between "<<(ros::Time::now() - pcl_conversions::fromPCL(clouds_.back()->header).stamp)
+          <<" to "<<(ros::Time::now() - pcl_conversions::fromPCL(clouds_.front()->header).stamp)<<" seconds after they were acquired.");
 
       // Copy references to the stored clouds
       cloud_full->header = clouds_.front()->header;
@@ -370,7 +371,7 @@ void ObjRecInterface::recognize_objects()
 
     // Construct recognized objects message
     objrec_msgs::RecognizedObjects objects_msg;
-    objects_msg.header.stamp = cloud->header.stamp;
+    objects_msg.header.stamp = pcl_conversions::fromPCL(cloud->header).stamp;
     objects_msg.header.frame_id = "/world";//cloud->header;
 
     for(std::list<PointSetShape*>::iterator it = detected_models.begin();
@@ -387,7 +388,7 @@ void ObjRecInterface::recognize_objects()
 
       // Transform into the world frame TODO: make this frame a parameter
       geometry_msgs::PoseStamped pose_stamped_in, pose_stamped_out;
-      pose_stamped_in.header = cloud->header;
+      pose_stamped_in.header = pcl_conversions::fromPCL(cloud->header);
       pose_stamped_in.pose = pss_msg.pose;
 
       try {
