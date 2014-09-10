@@ -12,6 +12,15 @@ find_package(catkin REQUIRED COMPONENTS roscpp tf geometry_msgs
 find_package(VTK REQUIRED)
 include(${VTK_USE_FILE})
 
+# catkin_package parameters: http://ros.org/doc/groovy/api/catkin/html/dev_guide/generated_cmake_api.html#catkin-package
+# TODO: fill in what other packages will need to use this package
+catkin_package(
+    DEPENDS roscpp tf geometry_msgs visualization_msgs sensor_msgs pcl_ros resource_retriever dynamic_reconfigure nodelet objrec_msgs objrec_core
+    CATKIN_DEPENDS # TODO
+    INCLUDE_DIRS include
+    LIBRARIES # TODO
+)
+
 add_executable(vtk_to_stl src/vtk_to_stl.cpp)
 target_link_libraries(vtk_to_stl vtkHybrid)
 
@@ -38,11 +47,12 @@ target_link_libraries(objrecransac_interface ${ObjRecRANSAC_LIBRARY} ${VTK_LIBS}
 target_link_libraries(objrecransac_nodelet objrecransac_interface)
 target_link_libraries(objrec_node objrecransac_interface) 
 
-# catkin_package parameters: http://ros.org/doc/groovy/api/catkin/html/dev_guide/generated_cmake_api.html#catkin-package
-# TODO: fill in what other packages will need to use this package
-catkin_package(
-    DEPENDS roscpp tf geometry_msgs visualization_msgs sensor_msgs pcl_ros resource_retriever dynamic_reconfigure nodelet objrec_msgs objrec_core
-    CATKIN_DEPENDS # TODO
-    INCLUDE_DIRS include
-    LIBRARIES # TODO
-)
+install(DIRECTORY data
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
+
+install(DIRECTORY launch
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
+
+install(DIRECTORY scripts 
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
+
