@@ -12,6 +12,11 @@ find_package(catkin REQUIRED COMPONENTS roscpp tf geometry_msgs
 find_package(VTK REQUIRED)
 include(${VTK_USE_FILE})
 
+set(CUDA_TOOLKIT_ROOT_DIR $ENV{CUDA_TOOLKIT_ROOT_DIR})
+FIND_PACKAGE(CUDA QUIET REQUIRED)
+
+add_definitions(-DOBJREC_USE_PCL_PLANE_EXTRACTION=${OBJREC_USE_PCL_PLANE_EXTRACTION})
+
 # catkin_package parameters: http://ros.org/doc/groovy/api/catkin/html/dev_guide/generated_cmake_api.html#catkin-package
 # TODO: fill in what other packages will need to use this package
 catkin_package(
@@ -26,8 +31,6 @@ target_link_libraries(vtk_to_stl vtkHybrid)
 
 # Add objrec nodelet
 include_directories(include ${catkin_INCLUDE_DIRS})
-
-FIND_PACKAGE(CUDA)
 
 # Add objrec node
 if(CUDA_FOUND)
