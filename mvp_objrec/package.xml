@@ -21,7 +21,7 @@
   <!-- Dependencies needed after this package is compiled. -->
   <run_depend>objrec_ros_integration</run_depend>
   <run_depend>objrec_msgs</run_depend>
-  <run_depend>cuda</run_depend>
+  <!--<run_depend>cuda</run_depend>-->
 
   <!-- Dependencies needed only for running tests. -->
 
