@@ -80,7 +80,8 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   n_clouds_per_recognition_(1),
   downsample_voxel_size_(3.5),
   confidence_time_multiplier_(30),
-  scene_points_(vtkPoints::New(VTK_DOUBLE)),
+  //TODO: remove this / unnecessary
+  //scene_points_(vtkPoints::New(VTK_DOUBLE)),
   time_to_stop_(false)
 {
   // Interface configuration
@@ -292,7 +293,8 @@ void ObjRecInterface::recognize_objects()
   pcl::PointIndices::Ptr outliers (new pcl::PointIndices);
   
   // Create point clouds for foreground and background points
-  vtkSmartPointer<vtkPoints> foreground_points(vtkPoints::New(VTK_DOUBLE));
+  vtkSmartPointer<vtkPoints> foreground_points;
+  foreground_points.TakeReference(vtkPoints::New(VTK_DOUBLE));
 
   std::list<PointSetShape*> detected_models;
 
