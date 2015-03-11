@@ -88,7 +88,7 @@ namespace objrec_ros_integration {
     // Mutex for managing buffery synchronization
     boost::mutex buffer_mutex_;
     bool time_to_stop_;
-    std::queue<boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > > clouds_;
+    std::list<boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > > clouds_;
     boost::scoped_ptr<boost::thread> recognition_thread_;
 
     // ObjRec parameters (all in millimeter)
@@ -98,8 +98,9 @@ namespace objrec_ros_integration {
     double relative_object_size_;
     double relative_number_of_illegal_points_;
     double z_distance_threshold_as_voxel_size_fraction_;
-    double normal_estimation_radius_;
+    int normal_estimation_radius_;
     double intersection_fraction_;
+    bool use_cuda_;
     
     // Enable iterative closest point post-processing
     bool icp_post_processing_;

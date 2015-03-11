@@ -63,11 +63,12 @@ static void array_to_pose(const double* array, geometry_msgs::Pose &pose_msg)
       array[6],array[7],array[8]);
   tf::Quaternion rot_q;
   rot_m.getRotation(rot_q);
+  rot_q = rot_q * tf::Quaternion(tf::Vector3(1.0,0,0), M_PI/2.0);
   tf::quaternionTFToMsg(rot_q, pose_msg.orientation);
 
-  pose_msg.position.x = array[9] / 1000.0;
-  pose_msg.position.y = array[10] / 1000.0;
-  pose_msg.position.z = array[11] / 1000.0;
+  pose_msg.position.x = array[9];
+  pose_msg.position.y = array[10];
+  pose_msg.position.z = array[11];
 }
 
 using namespace objrec_ros_integration;
@@ -78,11 +79,12 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   reconfigure_server_(nh),
   publish_markers_enabled_(false),
   n_clouds_per_recognition_(1),
-  downsample_voxel_size_(3.5),
+  downsample_voxel_size_(0.0035),
   confidence_time_multiplier_(30),
   //TODO: remove this / unnecessary
   //scene_points_(vtkPoints::New(VTK_DOUBLE)),
-  time_to_stop_(false)
+  time_to_stop_(false),
+  use_cuda_(false)
 {
   // Interface configuration
   nh.getParam("publish_markers", publish_markers_enabled_);
@@ -99,8 +101,10 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   // Get construction parameters from ROS & construct object recognizer
   require_param(nh,"pair_width",pair_width_);
   require_param(nh,"voxel_size",voxel_size_);
-  
+
   objrec_.reset(new ObjRecRANSAC(pair_width_, voxel_size_, 0.5));
+
+  objrec_->printParameters(stderr);
 
   // Get post-construction parameters from ROS
   require_param(nh,"object_visibility",object_visibility_);
@@ -110,6 +114,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"normal_estimation_radius",normal_estimation_radius_);
   require_param(nh,"intersection_fraction",intersection_fraction_);
   require_param(nh,"num_threads",num_threads_);
+  require_param(nh,"use_cuda",use_cuda_);
 
 	objrec_->setVisibility(object_visibility_);
 	objrec_->setRelativeObjectSize(relative_object_size_);
@@ -212,6 +217,7 @@ void ObjRecInterface::add_model(
 void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t level)
 {
   ROS_DEBUG("Reconfigure Request!");
+
   object_visibility_ = config.object_visibility;
   relative_object_size_ = config.relative_object_size;
   relative_number_of_illegal_points_ = config.relative_number_of_illegal_points;
@@ -219,6 +225,7 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
   normal_estimation_radius_ = config.normal_estimation_radius;
   intersection_fraction_ = config.intersection_fraction;
   num_threads_ = config.num_threads;
+  use_cuda_ = config.use_cuda;
 
 	objrec_->setVisibility(object_visibility_);
 	objrec_->setRelativeObjectSize(relative_object_size_);
@@ -227,6 +234,7 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
 	objrec_->setNormalEstimationRadius(normal_estimation_radius_);
 	objrec_->setIntersectionFraction(intersection_fraction_);
 	objrec_->setNumberOfThreads(num_threads_);
+	objrec_->setUseCUDA(use_cuda_);
 
   // Other parameters
   use_only_points_above_plane_ = config.use_only_points_above_plane;
@@ -257,6 +265,8 @@ void ObjRecInterface::pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::
   // Lock the buffer mutex while we're capturing a new point cloud
   boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
 
+  //ROS_INFO_STREAM("Received pointcloud! "<<clouds_.size()<<" clouds");
+
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_clipped(new pcl::PointCloud<pcl::PointXYZRGB>());
   cloud_clipped->header = cloud->header;
   for (int j = 0; j < (int) cloud->points.size(); ++j) {
@@ -270,11 +280,11 @@ void ObjRecInterface::pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::
   }
 
   // Store the cloud
-  clouds_.push(cloud_clipped);
+  clouds_.push_back(cloud_clipped);
 
   // Increment the cloud index
   if(clouds_.size() > (unsigned)n_clouds_per_recognition_) {
-    clouds_.pop();
+    clouds_.pop_front();
   }
 
   //foreground_points_pub_.publish(cloud_clipped);
@@ -309,9 +319,6 @@ void ObjRecInterface::recognize_objects()
     // Scope for syncrhonization
     ROS_DEBUG_STREAM("ObjRec: Aggregating point clouds... ");
     {
-      // Lock the buffer mutex
-      boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
-
       // Continue if the cloud is empty
       static ros::Rate warn_rate(1.0);
       if(clouds_.empty()) {
@@ -319,6 +326,9 @@ void ObjRecInterface::recognize_objects()
         warn_rate.sleep();
         continue;
       }
+      
+      // Lock the buffer mutex
+      boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
 
       ROS_DEBUG_STREAM("ObjRec: Computing objects from "
           <<clouds_.size()<<" point clounds "
@@ -328,18 +338,20 @@ void ObjRecInterface::recognize_objects()
       // Copy references to the stored clouds
       cloud_full->header = clouds_.front()->header;
 
-      while(!clouds_.empty()) {
-        *cloud_full += *(clouds_.front());
-        clouds_.pop();
+      for(std::list<boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > >::const_iterator it = clouds_.begin();
+          it != clouds_.end();
+          ++it)
+      {
+        *cloud_full += *(*it);
       }
     }
 
     ROS_DEBUG_STREAM("ObjRec: Downsampling full cloud from "<<cloud_full->points.size()<<" points...");
 
     voxel_grid->setLeafSize(
-        downsample_voxel_size_/1000.0,
-        downsample_voxel_size_/1000.0,
-        downsample_voxel_size_/1000.0);
+        downsample_voxel_size_,
+        downsample_voxel_size_,
+        downsample_voxel_size_);
     voxel_grid->setInputCloud(cloud_full);
     voxel_grid->filter(*cloud);
 
@@ -367,6 +379,8 @@ void ObjRecInterface::recognize_objects()
       continue;
     }
 
+    ROS_DEBUG_STREAM("Objrec: found plane with "<<inliers->indices.size()<<" points");
+
     // Flip plane if it's pointing away
     if(coefficients->values[2] > 0.0) {
       coefficients->values[0] *= -1.0;
@@ -382,6 +396,8 @@ void ObjRecInterface::recognize_objects()
     extract.setNegative(true);
     extract.filter(*cloud);
 
+    ROS_DEBUG_STREAM("Objrec: extracted "<<cloud->points.size()<<" foreground points");
+
     foreground_points->SetNumberOfPoints(cloud->points.size());
     foreground_points->Reset();
 
@@ -390,24 +406,28 @@ void ObjRecInterface::recognize_objects()
          it != cloud->end();
          ++it)
     {
-      const double dist = (
-          it->x * coefficients->values[0] +
-          it->y * coefficients->values[1] +
-          it->z * coefficients->values[2]) + coefficients->values[3];
+      const double dist = 
+        it->x * coefficients->values[0] +
+        it->y * coefficients->values[1] +
+        it->z * coefficients->values[2] + 
+        coefficients->values[3];
 
-      if(dist > plane_thickness_/1000.0/2.0) {
+      if(dist > plane_thickness_/2.0) {
         // Add point if it's above the plane
         foreground_points->InsertNextPoint(
-            it->x * 1000.0,
-            it->y * 1000.0,
-            it->z * 1000.0);
+            it->x,
+            it->y,
+            it->z);
       }
     }
 
     // Detect models
-    ROS_DEBUG_STREAM("ObjRec: Attempting recognition...");
+    ROS_DEBUG_STREAM("ObjRec: Attempting recognition on "<<foreground_points->GetNumberOfPoints()<<" foregeound points...");
     detected_models.clear();
-    objrec_->doRecognition(foreground_points, success_probability_, detected_models);
+    int success = objrec_->doRecognition(foreground_points, success_probability_, detected_models);
+    if(success != 0) {
+      ROS_ERROR_STREAM("Failed to recognize anything!");
+    }
 
     ROS_DEBUG("ObjRec: Seconds elapsed = %.2lf", objrec_->getLastOverallRecognitionTimeSec());
     ROS_DEBUG("ObjRec: Seconds per hypothesis = %.6lf", objrec_->getLastOverallRecognitionTimeSec()
@@ -476,9 +496,9 @@ void ObjRecInterface::publish_markers(const objrec_msgs::RecognizedObjects &obje
     marker.ns = "objrec";
     marker.id = 0;
 
-    marker.scale.x = 0.001;
-    marker.scale.y = 0.001;
-    marker.scale.z = 0.001;
+    marker.scale.x = 1.0;
+    marker.scale.y = 1.0;
+    marker.scale.z = 1.0;
 
     marker.color.a = 0.75;
     marker.color.r = 1.0;
