@@ -36,6 +36,8 @@ namespace objrec_ros_integration {
     ObjRecInterface(ros::NodeHandle nh = ros::NodeHandle("~"));
     ~ObjRecInterface();
 
+    void set_device_map(std::string &cuda_devices);
+
   private:
     void load_models_from_rosparam();
     void add_model(
@@ -101,6 +103,7 @@ namespace objrec_ros_integration {
     int normal_estimation_radius_;
     double intersection_fraction_;
     bool use_cuda_;
+    std::vector<int> cuda_device_map_;
     
     // Enable iterative closest point post-processing
     bool icp_post_processing_;

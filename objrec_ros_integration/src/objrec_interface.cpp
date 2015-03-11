@@ -116,6 +116,10 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"num_threads",num_threads_);
   require_param(nh,"use_cuda",use_cuda_);
 
+  std::string cuda_devices_str;
+  require_param(nh,"cuda_devices",cuda_devices_str);
+  this->set_device_map(cuda_devices_str);
+
 	objrec_->setVisibility(object_visibility_);
 	objrec_->setRelativeObjectSize(relative_object_size_);
 	objrec_->setRelativeNumberOfIllegalPoints(relative_number_of_illegal_points_);
@@ -123,6 +127,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
 	objrec_->setNormalEstimationRadius(normal_estimation_radius_);
 	objrec_->setIntersectionFraction(intersection_fraction_);
 	objrec_->setNumberOfThreads(num_threads_);
+	objrec_->setCUDADeviceMap(cuda_device_map_);
 
   // Get model info from rosparam
   this->load_models_from_rosparam(); 
@@ -214,6 +219,16 @@ void ObjRecInterface::add_model(
   objrec_->addModel(reader->GetOutput(), user_data.get());
 }
 
+void ObjRecInterface::set_device_map(std::string &cuda_devices)
+{
+  cuda_device_map_.clear();
+  istringstream device_map_iss(cuda_devices);
+  std::copy(std::istream_iterator<int>(device_map_iss),
+            std::istream_iterator<int>(),
+            std::back_inserter(cuda_device_map_));
+}
+
+
 void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t level)
 {
   ROS_DEBUG("Reconfigure Request!");
@@ -226,6 +241,7 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
   intersection_fraction_ = config.intersection_fraction;
   num_threads_ = config.num_threads;
   use_cuda_ = config.use_cuda;
+  set_device_map(config.cuda_devices);
 
 	objrec_->setVisibility(object_visibility_);
 	objrec_->setRelativeObjectSize(relative_object_size_);
@@ -235,6 +251,7 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
 	objrec_->setIntersectionFraction(intersection_fraction_);
 	objrec_->setNumberOfThreads(num_threads_);
 	objrec_->setUseCUDA(use_cuda_);
+	objrec_->setCUDADeviceMap(cuda_device_map_);
 
   // Other parameters
   use_only_points_above_plane_ = config.use_only_points_above_plane;
