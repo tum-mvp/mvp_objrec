@@ -130,7 +130,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
 	objrec_->setCUDADeviceMap(cuda_device_map_);
 
   // Get model info from rosparam
-  this->load_models_from_rosparam(); 
+  this->load_models_from_rosparam();
 
   // Get additional parameters from ROS
   require_param(nh,"success_probability",success_probability_);
@@ -156,7 +156,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   ROS_INFO_STREAM("Constructed ObjRec interface.");
 }
 
-ObjRecInterface::~ObjRecInterface() { 
+ObjRecInterface::~ObjRecInterface() {
   time_to_stop_ = true;
   recognition_thread_->join();
 }
@@ -169,7 +169,7 @@ void ObjRecInterface::load_models_from_rosparam()
   XmlRpc::XmlRpcValue objrec_models_xml;
   nh_.param("models", objrec_models_xml, objrec_models_xml);
 
-  // Iterate through the models 
+  // Iterate through the models
   for(int i =0; i < objrec_models_xml.size(); i++) {
     std::string model_label = static_cast<std::string>(objrec_models_xml[i]);
 
@@ -193,7 +193,7 @@ void ObjRecInterface::add_model(
   resource_retriever::MemoryResource resource;
 
   try {
-    resource = retriever.get(model_uri); 
+    resource = retriever.get(model_uri);
   } catch (resource_retriever::Exception& e) {
     ROS_ERROR_STREAM("Failed to retrieve \""<<model_label<<"\" model file from \""<<model_uri<<"\" error: "<<e.what());
     return;
@@ -209,7 +209,7 @@ void ObjRecInterface::add_model(
   reader->ReadFromInputStringOn();
   reader->Update();
   readers_.push_back(reader);
-  
+
   // Create new model user data
   boost::shared_ptr<UserData> user_data(new UserData());
   user_data->setLabel(model_label.c_str());
@@ -289,25 +289,23 @@ void ObjRecInterface::pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::
   for (int j = 0; j < (int) cloud->points.size(); ++j) {
     if (cloud->points[j].x > x_clip_min_ && cloud->points[j].x < x_clip_max_ &&
         cloud->points[j].y > y_clip_min_ && cloud->points[j].y < y_clip_max_ &&
-        cloud->points[j].z > z_clip_min_ && cloud->points[j].z < z_clip_max_) 
+        cloud->points[j].z > z_clip_min_ && cloud->points[j].z < z_clip_max_)
     {
       // Add point
       cloud_clipped->push_back(cloud->points[j]);
-    } 
+    }
   }
 
   // Store the cloud
   clouds_.push_back(cloud_clipped);
 
   // Increment the cloud index
-  if(clouds_.size() > (unsigned)n_clouds_per_recognition_) {
+  while(clouds_.size() > (unsigned)n_clouds_per_recognition_) {
     clouds_.pop_front();
   }
-
-  //foreground_points_pub_.publish(cloud_clipped);
 }
 
-void ObjRecInterface::recognize_objects() 
+void ObjRecInterface::recognize_objects()
 {
   ros::Rate max_rate(100.0);
 
@@ -318,14 +316,14 @@ void ObjRecInterface::recognize_objects()
   pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
   pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
   pcl::PointIndices::Ptr outliers (new pcl::PointIndices);
-  
+
   // Create point clouds for foreground and background points
   vtkSmartPointer<vtkPoints> foreground_points;
   foreground_points.TakeReference(vtkPoints::New(VTK_DOUBLE));
 
   std::list<PointSetShape*> detected_models;
 
-  while(ros::ok() && !time_to_stop_) 
+  while(ros::ok() && !time_to_stop_)
   {
     // Don't hog the cpu
     max_rate.sleep();
@@ -343,7 +341,7 @@ void ObjRecInterface::recognize_objects()
         warn_rate.sleep();
         continue;
       }
-      
+
       // Lock the buffer mutex
       boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
 
@@ -423,10 +421,10 @@ void ObjRecInterface::recognize_objects()
          it != cloud->end();
          ++it)
     {
-      const double dist = 
+      const double dist =
         it->x * coefficients->values[0] +
         it->y * coefficients->values[1] +
-        it->z * coefficients->values[2] + 
+        it->z * coefficients->values[2] +
         coefficients->values[3];
 
       if(dist > plane_thickness_/2.0) {
