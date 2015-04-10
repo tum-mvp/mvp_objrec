@@ -10,6 +10,7 @@ namespace objrec_ros_integration
     NODELET_DEBUG("Initializing nodelet...");
 
     or_interface.reset(new ObjRecInterface(this->getPrivateNodeHandle()));
+    or_interface->start();
   }
 }
 

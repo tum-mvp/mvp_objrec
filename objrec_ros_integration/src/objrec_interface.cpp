@@ -103,7 +103,6 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"voxel_size",voxel_size_);
 
   objrec_.reset(new ObjRecRANSAC(pair_width_, voxel_size_, 0.5));
-
   objrec_->printParameters(stderr);
 
   // Get post-construction parameters from ROS
@@ -150,15 +149,25 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   // Set up dynamic reconfigure
   reconfigure_server_.setCallback(boost::bind(&ObjRecInterface::reconfigure_cb, this, _1, _2));
 
-  // Start recognition thread
-  recognition_thread_.reset(new boost::thread(boost::bind(&ObjRecInterface::recognize_objects, this)));
-
   ROS_INFO_STREAM("Constructed ObjRec interface.");
 }
 
 ObjRecInterface::~ObjRecInterface() {
   time_to_stop_ = true;
-  recognition_thread_->join();
+  if(recognition_thread_) {
+    recognition_thread_->join();
+  }
+}
+
+void ObjRecInterface::start()
+{
+  time_to_stop_ = true;
+  if(recognition_thread_) {
+    recognition_thread_->join();
+  }
+  time_to_stop_ = false;
+  // Start recognition thread
+  recognition_thread_.reset(new boost::thread(boost::bind(&ObjRecInterface::recognize_objects_thread, this)));
 }
 
 void ObjRecInterface::load_models_from_rosparam()
@@ -305,10 +314,119 @@ void ObjRecInterface::pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::
   }
 }
 
-void ObjRecInterface::recognize_objects()
+bool ObjRecInterface::recognize_objects(
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr &cloud_full,
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr &cloud,
+    boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > &voxel_grid,
+    pcl::ModelCoefficients::Ptr &coefficients,
+    pcl::PointIndices::Ptr &inliers,
+    pcl::PointIndices::Ptr &outliers,
+    vtkSmartPointer<vtkPoints> &foreground_points,
+    std::list<PointSetShape*> &detected_models,
+    bool downsample,
+    bool segment_plane)
+{
+  // Downsample cloud
+  ROS_DEBUG_STREAM("ObjRec: Downsampling full cloud from "<<cloud_full->points.size()<<" points...");
+  {
+    voxel_grid->setLeafSize(
+        downsample_voxel_size_,
+        downsample_voxel_size_,
+        downsample_voxel_size_);
+    voxel_grid->setInputCloud(cloud_full);
+    voxel_grid->filter(*cloud);
+
+    ROS_DEBUG_STREAM("ObjRec: Downsampled cloud has "<<cloud->points.size()<<" points.");
+  }
+
+  // Remove plane points
+  ROS_DEBUG("ObjRec: Removing points not above plane with PCL...");
+  {
+    // Create the segmentation object
+    pcl::SACSegmentation<pcl::PointXYZRGB> seg;
+    // Optional
+    seg.setOptimizeCoefficients (true);
+    // Mandatory
+    seg.setModelType (pcl::SACMODEL_PLANE);
+    seg.setMethodType (pcl::SAC_RANSAC);
+    seg.setDistanceThreshold (0.01);
+
+    seg.setInputCloud (cloud);
+    seg.segment (*inliers, *coefficients);
+
+    if (inliers->indices.size () == 0)
+    {
+      ROS_ERROR_STREAM("Could not estimate a planar model for the given dataset.");
+      return false;
+    }
+
+    ROS_DEBUG_STREAM("Objrec: found plane with "<<inliers->indices.size()<<" points");
+
+    // Flip plane if it's pointing away
+    if(coefficients->values[2] > 0.0) {
+      coefficients->values[0] *= -1.0;
+      coefficients->values[1] *= -1.0;
+      coefficients->values[2] *= -1.0;
+      coefficients->values[3] *= -1.0;
+    }
+
+    // Remove the plane points and extract the rest
+    // TODO: Is this double work??
+    pcl::ExtractIndices<pcl::PointXYZRGB> extract;
+    extract.setInputCloud(cloud);
+    extract.setIndices(inliers);
+    extract.setNegative(true);
+    extract.filter(*cloud);
+
+    ROS_DEBUG_STREAM("Objrec: extracted "<<cloud->points.size()<<" foreground points");
+
+    // Fill the foreground cloud
+    foreground_points->SetNumberOfPoints(cloud->points.size());
+    foreground_points->Reset();
+
+    // Require the points are inside of the clopping box
+    for (pcl::PointCloud<pcl::PointXYZRGB>::const_iterator it = cloud->begin();
+         it != cloud->end();
+         ++it)
+    {
+      const double dist =
+        it->x * coefficients->values[0] +
+        it->y * coefficients->values[1] +
+        it->z * coefficients->values[2] +
+        coefficients->values[3];
+
+      if(dist > plane_thickness_/2.0) {
+        // Add point if it's above the plane
+        foreground_points->InsertNextPoint(
+            it->x,
+            it->y,
+            it->z);
+      }
+    }
+  }
+
+  // Detect models
+  ROS_DEBUG_STREAM("ObjRec: Attempting recognition on "<<foreground_points->GetNumberOfPoints()<<" foregeound points...");
+  {
+    detected_models.clear();
+    int success = objrec_->doRecognition(foreground_points, success_probability_, detected_models);
+    if(success != 0) {
+      ROS_ERROR_STREAM("Failed to recognize anything!");
+    }
+
+    ROS_DEBUG("ObjRec: Seconds elapsed = %.2lf", objrec_->getLastOverallRecognitionTimeSec());
+    ROS_DEBUG("ObjRec: Seconds per hypothesis = %.6lf", objrec_->getLastOverallRecognitionTimeSec()
+              / (double) objrec_->getLastNumberOfCheckedHypotheses());
+  }
+
+  return true;
+}
+
+void ObjRecInterface::recognize_objects_thread()
 {
   ros::Rate max_rate(100.0);
 
+  // Working structures
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_full(new pcl::PointCloud<pcl::PointXYZRGB>());
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
   boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > voxel_grid(new pcl::VoxelGrid<pcl::PointXYZRGB>());
@@ -331,9 +449,10 @@ void ObjRecInterface::recognize_objects()
     cloud_full->clear();
     cloud->clear();
 
-    // Scope for syncrhonization
     ROS_DEBUG_STREAM("ObjRec: Aggregating point clouds... ");
     {
+      // Scope for syncrhonization
+
       // Continue if the cloud is empty
       static ros::Rate warn_rate(1.0);
       if(clouds_.empty()) {
@@ -361,92 +480,21 @@ void ObjRecInterface::recognize_objects()
       }
     }
 
-    ROS_DEBUG_STREAM("ObjRec: Downsampling full cloud from "<<cloud_full->points.size()<<" points...");
+    // Recongize objects
+    bool objects_recognized = this->recognize_objects(
+        cloud_full,
+        cloud,
+        voxel_grid,
+        coefficients, inliers, outliers,
+        foreground_points,
+        detected_models,
+        true,
+        true);
 
-    voxel_grid->setLeafSize(
-        downsample_voxel_size_,
-        downsample_voxel_size_,
-        downsample_voxel_size_);
-    voxel_grid->setInputCloud(cloud_full);
-    voxel_grid->filter(*cloud);
-
-    ROS_DEBUG_STREAM("ObjRec: Downsampled cloud has "<<cloud->points.size()<<" points.");
-
-
-
-    ROS_DEBUG("ObjRec: Removing points not above plane with PCL...");
-
-    // Create the segmentation object
-    pcl::SACSegmentation<pcl::PointXYZRGB> seg;
-    // Optional
-    seg.setOptimizeCoefficients (true);
-    // Mandatory
-    seg.setModelType (pcl::SACMODEL_PLANE);
-    seg.setMethodType (pcl::SAC_RANSAC);
-    seg.setDistanceThreshold (0.01);
-
-    seg.setInputCloud (cloud);
-    seg.segment (*inliers, *coefficients);
-
-    if (inliers->indices.size () == 0)
-    {
-      ROS_ERROR_STREAM("Could not estimate a planar model for the given dataset.");
+    // No objects recognized
+    if(!objects_recognized) {
       continue;
     }
-
-    ROS_DEBUG_STREAM("Objrec: found plane with "<<inliers->indices.size()<<" points");
-
-    // Flip plane if it's pointing away
-    if(coefficients->values[2] > 0.0) {
-      coefficients->values[0] *= -1.0;
-      coefficients->values[1] *= -1.0;
-      coefficients->values[2] *= -1.0;
-      coefficients->values[3] *= -1.0;
-    }
-
-    // Remove the planar inliers, extract the rest
-    pcl::ExtractIndices<pcl::PointXYZRGB> extract;
-    extract.setInputCloud(cloud);
-    extract.setIndices(inliers);
-    extract.setNegative(true);
-    extract.filter(*cloud);
-
-    ROS_DEBUG_STREAM("Objrec: extracted "<<cloud->points.size()<<" foreground points");
-
-    foreground_points->SetNumberOfPoints(cloud->points.size());
-    foreground_points->Reset();
-
-    // Require the points are inside of the clopping box
-    for (pcl::PointCloud<pcl::PointXYZRGB>::const_iterator it = cloud->begin();
-         it != cloud->end();
-         ++it)
-    {
-      const double dist =
-        it->x * coefficients->values[0] +
-        it->y * coefficients->values[1] +
-        it->z * coefficients->values[2] +
-        coefficients->values[3];
-
-      if(dist > plane_thickness_/2.0) {
-        // Add point if it's above the plane
-        foreground_points->InsertNextPoint(
-            it->x,
-            it->y,
-            it->z);
-      }
-    }
-
-    // Detect models
-    ROS_DEBUG_STREAM("ObjRec: Attempting recognition on "<<foreground_points->GetNumberOfPoints()<<" foregeound points...");
-    detected_models.clear();
-    int success = objrec_->doRecognition(foreground_points, success_probability_, detected_models);
-    if(success != 0) {
-      ROS_ERROR_STREAM("Failed to recognize anything!");
-    }
-
-    ROS_DEBUG("ObjRec: Seconds elapsed = %.2lf", objrec_->getLastOverallRecognitionTimeSec());
-    ROS_DEBUG("ObjRec: Seconds per hypothesis = %.6lf", objrec_->getLastOverallRecognitionTimeSec()
-        / (double) objrec_->getLastNumberOfCheckedHypotheses());
 
     // Construct recognized objects message
     objrec_msgs::RecognizedObjects objects_msg;

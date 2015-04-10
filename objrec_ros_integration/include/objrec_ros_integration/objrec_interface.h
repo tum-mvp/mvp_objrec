@@ -28,6 +28,7 @@
 #include <objrec_msgs/ObjRecConfig.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl/filters/voxel_grid.h>
 #include <tf/transform_listener.h>
 
 namespace objrec_ros_integration {
@@ -48,7 +49,20 @@ namespace objrec_ros_integration {
 
     void cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg);
     void pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > &points_msg);
-    void recognize_objects();
+    bool recognize_objects(
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr &cloud_full,
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr &cloud,
+        boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > &voxel_grid,
+        pcl::ModelCoefficients::Ptr &coefficients,
+        pcl::PointIndices::Ptr &inliers,
+        pcl::PointIndices::Ptr &outliers,
+        vtkSmartPointer<vtkPoints> &foreground_points,
+        std::list<PointSetShape*> &detected_models,
+        bool downsample,
+        bool segment_plane);
+
+    void start();
+    void recognize_objects_thread();
     void publish_markers(const objrec_msgs::RecognizedObjects &msg);
 
     // ROS Structures
