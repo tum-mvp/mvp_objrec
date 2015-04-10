@@ -323,7 +323,7 @@ void ObjRecInterface::recognize_objects()
   vtkSmartPointer<vtkPoints> foreground_points;
   foreground_points.TakeReference(vtkPoints::New(VTK_DOUBLE));
 
-  std::list<PointSetShape*> detected_models;
+  std::list<boost::shared_ptr<PointSetShape> > detected_models;
 
   while(ros::ok() && !time_to_stop_) 
   {
@@ -455,11 +455,11 @@ void ObjRecInterface::recognize_objects()
     objects_msg.header.stamp = pcl_conversions::fromPCL(cloud->header).stamp;
     objects_msg.header.frame_id = "/world";//cloud->header;
 
-    for(std::list<PointSetShape*>::iterator it = detected_models.begin();
+    for(std::list<boost::shared_ptr<PointSetShape> >::iterator it = detected_models.begin();
         it != detected_models.end();
         ++it)
     {
-      PointSetShape *detected_model = *it;
+      boost::shared_ptr<PointSetShape> detected_model = *it;
 
       // Construct and populate a message
       objrec_msgs::PointSetShape pss_msg;
@@ -481,7 +481,6 @@ void ObjRecInterface::recognize_objects()
       }
 
       objects_msg.objects.push_back(pss_msg);
-      delete *it;
     }
 
     // Publish the visualization markers
