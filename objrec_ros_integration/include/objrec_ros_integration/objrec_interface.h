@@ -31,6 +31,8 @@
 #include <pcl/filters/voxel_grid.h>
 #include <tf/transform_listener.h>
 
+#include <pcl/recognition/obj_rec_ransac.h>
+
 namespace objrec_ros_integration {
   class ObjRecInterface {
   public:
@@ -90,8 +92,10 @@ namespace objrec_ros_integration {
     double z_clip_min_;
     double z_clip_max_;
 
-    // ObjRec structure
+    // TUM ObjRec structure
     boost::scoped_ptr<ObjRecRANSAC> objrec_;
+    // PCL ObjRec
+    boost::scoped_ptr<pcl::recognition::ObjRecRANSAC> objrec__pcl_;
 
     std::list<boost::shared_ptr<UserData> > user_data_list_;
     std::list<vtkSmartPointer<vtkPolyDataReader> > readers_;

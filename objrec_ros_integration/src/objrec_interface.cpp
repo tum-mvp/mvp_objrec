@@ -21,6 +21,7 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/filters/extract_indices.h>
 
+#include <pcl/recognition/obj_rec_ransac.h>
 
 #include <resource_retriever/retriever.h>
 
@@ -98,14 +99,11 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   nh.getParam("z_clip_min", z_clip_min_);
   nh.getParam("z_clip_max", z_clip_max_);
 
-  // Get construction parameters from ROS & construct object recognizer
-  require_param(nh,"pair_width",pair_width_);
-  require_param(nh,"voxel_size",voxel_size_);
+  // Plane detection parameters
+  require_param(nh,"plane_thickness",plane_thickness_);
+  require_param(nh,"rel_num_of_plane_points",rel_num_of_plane_points_);
 
-  objrec_.reset(new ObjRecRANSAC(pair_width_, voxel_size_, 0.5));
-  objrec_->printParameters(stderr);
-
-  // Get post-construction parameters from ROS
+  // Get other parameters from ROS
   require_param(nh,"object_visibility",object_visibility_);
   require_param(nh,"relative_object_size",relative_object_size_);
   require_param(nh,"relative_number_of_illegal_points",relative_number_of_illegal_points_);
@@ -115,9 +113,25 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"num_threads",num_threads_);
   require_param(nh,"use_cuda",use_cuda_);
 
+  // Get additional parameters from ROS
+  require_param(nh,"success_probability",success_probability_);
+  require_param(nh,"use_only_points_above_plane",use_only_points_above_plane_);
+
   std::string cuda_devices_str;
   require_param(nh,"cuda_devices",cuda_devices_str);
   this->set_device_map(cuda_devices_str);
+
+  // Get construction parameters from ROS
+  require_param(nh,"pair_width",pair_width_);
+  require_param(nh,"voxel_size",voxel_size_);
+  // TODO: add pair_fraction parameter
+
+  // Create TUM version
+  objrec_.reset(new ObjRecRANSAC(
+          pair_width_,
+          voxel_size_,
+          0.5 /*fraction of pairs in hashtable*/));
+  objrec_->printParameters(stderr);
 
 	objrec_->setVisibility(object_visibility_);
 	objrec_->setRelativeObjectSize(relative_object_size_);
@@ -128,16 +142,29 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
 	objrec_->setNumberOfThreads(num_threads_);
 	objrec_->setCUDADeviceMap(cuda_device_map_);
 
+  // Create PCL version
+  // TODO: subclass PCL version in order to control all parameters
+  objrec_pcl_.reset(new pcl::recognition::ObjRecRANSAC(
+          pair_width_,
+          voxel_size_));
+          /* fraction of pairs in hashtable is 1.0 */
+
+	//objrec_->setVisibility(object_visibility_); /* 0.2 default */
+	//objrec_->setRelativeObjectSize(relative_object_size_); /* 0.05 default */
+	//objrec_->setRelativeNumberOfIllegalPoints(relative_number_of_illegal_points_); /* 0.02 default */
+	//objrec_->setZDistanceThreshAsVoxelSizeFraction(z_distance_threshold_as_voxel_size_fraction_); /* 1.5*voxel_size */
+	//objrec_->setNormalEstimationRadius(normal_estimation_radius_); /* UNUSED */
+	//objrec_->setIntersectionFraction(intersection_fraction_); /* 0.03 default */
+	//objrec_->setNumberOfThreads(num_threads_); /* UNUSED */
+	//objrec_->setCUDADeviceMap(cuda_device_map_); /* UNUSED */
+
+  objrec_pcl_->setMaxCoplanarityAngleDegrees(3.0); /* 3.0 default */
+  objrec_pcl_->setSceneBoundsEnlargementFactor(0.25); /* 0.25 default */
+  (true) ? objrec_pcl_->ignoreCoplanarPointPairsOn() : obrjec_pcl_->ignoreCoplanarPointPairsOff();
+  (true) ? objrec_pcl_->icpHypothesisRefinementOn() : obrjec_pcl_->icpHypothesisRefinementOff();
+
   // Get model info from rosparam
   this->load_models_from_rosparam();
-
-  // Get additional parameters from ROS
-  require_param(nh,"success_probability",success_probability_);
-  require_param(nh,"use_only_points_above_plane",use_only_points_above_plane_);
-
-  // Plane detection parameters
-  require_param(nh,"plane_thickness",plane_thickness_);
-  require_param(nh,"rel_num_of_plane_points",rel_num_of_plane_points_);
 
   // Construct subscribers and publishers
   cloud_sub_ = nh.subscribe("points", 1, &ObjRecInterface::cloud_cb, this);
@@ -226,6 +253,45 @@ void ObjRecInterface::add_model(
 
   // Add the model to the model library
   objrec_->addModel(reader->GetOutput(), user_data.get());
+
+  ////
+
+  // Add the model to the pcl version
+  pcl::PointCloud<pcl::PointXYZ>::Ptr model_points(new pcl::PointCloud<pcl::PointXYZ>());
+  pcl::PointCloud<pcl::Normal>::Ptr model_normals(new pcl::PointCloud<pcl::Normal>());
+
+  // Get the VTK normals
+  vtkSmartPointer<vtkPolyData> polydata = reader->GetOutput();
+  vtkSmartPointer<vtkDoubleArray> pointNormalsRetrieved =
+    vtkDoubleArray::SafeDownCast(polydata->GetPointData()->GetNormals());
+
+  if(!pointNormalsRetrieved) {
+    ROS_ERROR_STREAM("No vertex normals for mesh: "<<model_uri);
+    return;
+  }
+
+  // Get the VTK points
+  size_t n_points = polydata->GetNumberOfPoints();
+  size_t n_normals = pointNormalsRetrieved->GetNumberOfTuples();
+
+  if(n_points != n_normals) {
+    ROS_ERROR_STREAM("Different numbers of vertices and vertex normals for mesh: "<<model_uri);
+    return;
+  }
+
+  for(vtkIdType i = 0; i < n_points; i++)
+  {
+    double pV[3];
+    double pN[3];
+
+    polydata->GetPoint(i, pV);
+    pointNormalsRetrieved->GetTuple(i, pN);
+
+    model_points.push_back(pcl::Normal(pV[0], pV[1], pV[2]));
+    model_normals.push_back(pcl::Normal(pN[0], pN[1], pN[2]));
+  }
+
+  objrec_pcl_->addModel(model_points, model_normals, model_label, user_data.get());
 }
 
 void ObjRecInterface::set_device_map(std::string &cuda_devices)
