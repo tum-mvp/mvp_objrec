@@ -8,6 +8,8 @@
 #include <VtkBasics/VtkWindow.h>
 #include <vtkPolyDataWriter.h>
 #include <vtkPolyData.h>
+#include <vtkDoubleArray.h>
+#include <vtkPointData.h>
 #include <vtkCommand.h>
 #include <vtkPoints.h>
 #include <list>
@@ -218,6 +220,35 @@ void ObjRecInterface::add_model(
   reader->ReadFromInputStringOn();
   reader->Update();
   readers_.push_back(reader);
+
+  // Get the VTK normals
+  vtkSmartPointer<vtkPolyData> polydata = reader->GetOutput();
+  vtkSmartPointer<vtkDoubleArray> pointNormalsRetrieved =
+    vtkDoubleArray::SafeDownCast(polydata->GetPointData()->GetNormals());
+
+  if(!pointNormalsRetrieved) {
+    ROS_ERROR_STREAM("No vertex normals for mesh: "<<model_uri);
+    return;
+  }
+
+  // Get the VTK points
+  size_t n_points = polydata->GetNumberOfPoints();
+  size_t n_normals = pointNormalsRetrieved->GetNumberOfTuples();
+
+  if(n_points != n_normals) {
+    ROS_ERROR_STREAM("Different numbers of vertices and vertex normals for mesh: "<<model_uri);
+    return;
+  }
+
+  // This is just here for reference
+  for(vtkIdType i = 0; i < n_points; i++)
+  {
+    double pV[3];
+    double pN[3];
+
+    polydata->GetPoint(i, pV);
+    pointNormalsRetrieved->GetTuple(i, pN);
+  }
 
   // Create new model user data
   boost::shared_ptr<UserData> user_data(new UserData());

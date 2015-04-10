@@ -39,16 +39,6 @@ namespace objrec_ros_integration {
 
     void set_device_map(std::string &cuda_devices);
 
-  private:
-    void load_models_from_rosparam();
-    void add_model(
-        const std::string &model_name,
-        const std::string &model_uri);
-
-    void reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t level);
-
-    void cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg);
-    void pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > &points_msg);
     bool recognize_objects(
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr &cloud_full,
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr &cloud,
@@ -62,6 +52,17 @@ namespace objrec_ros_integration {
         bool segment_plane);
 
     void start();
+
+  private:
+    void load_models_from_rosparam();
+    void add_model(
+        const std::string &model_name,
+        const std::string &model_uri);
+
+    void reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t level);
+
+    void cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg);
+    void pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > &points_msg);
     void recognize_objects_thread();
     void publish_markers(const objrec_msgs::RecognizedObjects &msg);
 
