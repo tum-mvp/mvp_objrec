@@ -8,6 +8,8 @@
 #include <VtkBasics/VtkWindow.h>
 #include <vtkPolyDataWriter.h>
 #include <vtkPolyData.h>
+#include <vtkDoubleArray.h>
+#include <vtkPointData.h>
 #include <vtkCommand.h>
 #include <vtkPoints.h>
 #include <list>
@@ -85,12 +87,15 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   //scene_points_(vtkPoints::New(VTK_DOUBLE)),
   time_to_stop_(false),
   use_cuda_(false)
+  clip_cloud_(true);
+  do_plane_extraction_(true);
 {
   // Interface configuration
   nh.getParam("publish_markers", publish_markers_enabled_);
   nh.getParam("n_clouds_per_recognition", n_clouds_per_recognition_);
   nh.getParam("downsample_voxel_size", downsample_voxel_size_);
 
+  nh.getParam("clip_cloud", clip_cloud);
   nh.getParam("x_clip_min", x_clip_min_);
   nh.getParam("x_clip_max", x_clip_max_);
   nh.getParam("y_clip_min", y_clip_min_);
@@ -103,7 +108,6 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"voxel_size",voxel_size_);
 
   objrec_.reset(new ObjRecRANSAC(pair_width_, voxel_size_, 0.5));
-
   objrec_->printParameters(stderr);
 
   // Get post-construction parameters from ROS
@@ -130,7 +134,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
 	objrec_->setCUDADeviceMap(cuda_device_map_);
 
   // Get model info from rosparam
-  this->load_models_from_rosparam(); 
+  this->load_models_from_rosparam();
 
   // Get additional parameters from ROS
   require_param(nh,"success_probability",success_probability_);
@@ -150,15 +154,25 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   // Set up dynamic reconfigure
   reconfigure_server_.setCallback(boost::bind(&ObjRecInterface::reconfigure_cb, this, _1, _2));
 
-  // Start recognition thread
-  recognition_thread_.reset(new boost::thread(boost::bind(&ObjRecInterface::recognize_objects, this)));
-
   ROS_INFO_STREAM("Constructed ObjRec interface.");
 }
 
-ObjRecInterface::~ObjRecInterface() { 
+ObjRecInterface::~ObjRecInterface() {
   time_to_stop_ = true;
-  recognition_thread_->join();
+  if(recognition_thread_) {
+    recognition_thread_->join();
+  }
+}
+
+void ObjRecInterface::start()
+{
+  time_to_stop_ = true;
+  if(recognition_thread_) {
+    recognition_thread_->join();
+  }
+  time_to_stop_ = false;
+  // Start recognition thread
+  recognition_thread_.reset(new boost::thread(boost::bind(&ObjRecInterface::recognize_objects_thread, this)));
 }
 
 void ObjRecInterface::load_models_from_rosparam()
@@ -169,7 +183,7 @@ void ObjRecInterface::load_models_from_rosparam()
   XmlRpc::XmlRpcValue objrec_models_xml;
   nh_.param("models", objrec_models_xml, objrec_models_xml);
 
-  // Iterate through the models 
+  // Iterate through the models
   for(int i =0; i < objrec_models_xml.size(); i++) {
     std::string model_label = static_cast<std::string>(objrec_models_xml[i]);
 
@@ -193,7 +207,7 @@ void ObjRecInterface::add_model(
   resource_retriever::MemoryResource resource;
 
   try {
-    resource = retriever.get(model_uri); 
+    resource = retriever.get(model_uri);
   } catch (resource_retriever::Exception& e) {
     ROS_ERROR_STREAM("Failed to retrieve \""<<model_label<<"\" model file from \""<<model_uri<<"\" error: "<<e.what());
     return;
@@ -209,7 +223,36 @@ void ObjRecInterface::add_model(
   reader->ReadFromInputStringOn();
   reader->Update();
   readers_.push_back(reader);
-  
+
+  // Get the VTK normals
+  vtkSmartPointer<vtkPolyData> polydata = reader->GetOutput();
+  vtkSmartPointer<vtkDoubleArray> pointNormalsRetrieved =
+    vtkDoubleArray::SafeDownCast(polydata->GetPointData()->GetNormals());
+
+  if(!pointNormalsRetrieved) {
+    ROS_ERROR_STREAM("No vertex normals for mesh: "<<model_uri);
+    return;
+  }
+
+  // Get the VTK points
+  size_t n_points = polydata->GetNumberOfPoints();
+  size_t n_normals = pointNormalsRetrieved->GetNumberOfTuples();
+
+  if(n_points != n_normals) {
+    ROS_ERROR_STREAM("Different numbers of vertices and vertex normals for mesh: "<<model_uri);
+    return;
+  }
+
+  // This is just here for reference
+  for(vtkIdType i = 0; i < n_points; i++)
+  {
+    double pV[3];
+    double pN[3];
+
+    polydata->GetPoint(i, pV);
+    pointNormalsRetrieved->GetTuple(i, pN);
+  }
+
   // Create new model user data
   boost::shared_ptr<UserData> user_data(new UserData());
   user_data->setLabel(model_label.c_str());
@@ -289,28 +332,135 @@ void ObjRecInterface::pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::
   for (int j = 0; j < (int) cloud->points.size(); ++j) {
     if (cloud->points[j].x > x_clip_min_ && cloud->points[j].x < x_clip_max_ &&
         cloud->points[j].y > y_clip_min_ && cloud->points[j].y < y_clip_max_ &&
-        cloud->points[j].z > z_clip_min_ && cloud->points[j].z < z_clip_max_) 
+        cloud->points[j].z > z_clip_min_ && cloud->points[j].z < z_clip_max_)
     {
       // Add point
       cloud_clipped->push_back(cloud->points[j]);
-    } 
+    }
   }
 
   // Store the cloud
   clouds_.push_back(cloud_clipped);
 
   // Increment the cloud index
-  if(clouds_.size() > (unsigned)n_clouds_per_recognition_) {
+  while(clouds_.size() > (unsigned)n_clouds_per_recognition_) {
     clouds_.pop_front();
   }
-
-  //foreground_points_pub_.publish(cloud_clipped);
 }
 
-void ObjRecInterface::recognize_objects() 
+bool ObjRecInterface::recognize_objects(
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr &cloud_full,
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr &cloud,
+    boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > &voxel_grid,
+    pcl::ModelCoefficients::Ptr &coefficients,
+    pcl::PointIndices::Ptr &inliers,
+    pcl::PointIndices::Ptr &outliers,
+    vtkSmartPointer<vtkPoints> &foreground_points,
+    std::list<PointSetShape*> &detected_models,
+    bool downsample,
+    bool segment_plane)
+{
+  // Downsample cloud
+  ROS_DEBUG_STREAM("ObjRec: Downsampling full cloud from "<<cloud_full->points.size()<<" points...");
+  {
+    voxel_grid->setLeafSize(
+        downsample_voxel_size_,
+        downsample_voxel_size_,
+        downsample_voxel_size_);
+    voxel_grid->setInputCloud(cloud_full);
+    voxel_grid->filter(*cloud);
+
+    ROS_DEBUG_STREAM("ObjRec: Downsampled cloud has "<<cloud->points.size()<<" points.");
+  }
+
+  // Remove plane points
+  ROS_DEBUG("ObjRec: Removing points not above plane with PCL...");
+  {
+    // Create the segmentation object
+    pcl::SACSegmentation<pcl::PointXYZRGB> seg;
+    // Optional
+    seg.setOptimizeCoefficients (true);
+    // Mandatory
+    seg.setModelType (pcl::SACMODEL_PLANE);
+    seg.setMethodType (pcl::SAC_RANSAC);
+    seg.setDistanceThreshold (0.01);
+
+    seg.setInputCloud (cloud);
+    seg.segment (*inliers, *coefficients);
+
+    if (inliers->indices.size () == 0)
+    {
+      ROS_ERROR_STREAM("Could not estimate a planar model for the given dataset.");
+      return false;
+    }
+
+    ROS_DEBUG_STREAM("Objrec: found plane with "<<inliers->indices.size()<<" points");
+
+    // Flip plane if it's pointing away
+    if(coefficients->values[2] > 0.0) {
+      coefficients->values[0] *= -1.0;
+      coefficients->values[1] *= -1.0;
+      coefficients->values[2] *= -1.0;
+      coefficients->values[3] *= -1.0;
+    }
+
+    // Remove the plane points and extract the rest
+    // TODO: Is this double work??
+    pcl::ExtractIndices<pcl::PointXYZRGB> extract;
+    extract.setInputCloud(cloud);
+    extract.setIndices(inliers);
+    extract.setNegative(true);
+    extract.filter(*cloud);
+
+    ROS_DEBUG_STREAM("Objrec: extracted "<<cloud->points.size()<<" foreground points");
+
+    // Fill the foreground cloud
+    foreground_points->SetNumberOfPoints(cloud->points.size());
+    foreground_points->Reset();
+
+    // Require the points are inside of the clopping box
+    for (pcl::PointCloud<pcl::PointXYZRGB>::const_iterator it = cloud->begin();
+         it != cloud->end();
+         ++it)
+    {
+      const double dist =
+        it->x * coefficients->values[0] +
+        it->y * coefficients->values[1] +
+        it->z * coefficients->values[2] +
+        coefficients->values[3];
+
+      if(dist > plane_thickness_/2.0) {
+        // Add point if it's above the plane
+        foreground_points->InsertNextPoint(
+            it->x,
+            it->y,
+            it->z);
+      }
+    }
+  }
+
+  // Detect models
+  ROS_DEBUG_STREAM("ObjRec: Attempting recognition on "<<foreground_points->GetNumberOfPoints()<<" foregeound points...");
+  {
+    detected_models.clear();
+    int success = objrec_->doRecognition(foreground_points, success_probability_, detected_models);
+    if(success != 0) {
+      ROS_ERROR_STREAM("Failed to recognize anything!");
+    }
+
+    ROS_DEBUG("ObjRec: Seconds elapsed = %.2lf", objrec_->getLastOverallRecognitionTimeSec());
+    ROS_DEBUG("ObjRec: Seconds per hypothesis = %.6lf", objrec_->getLastOverallRecognitionTimeSec()
+              / (double) objrec_->getLastNumberOfCheckedHypotheses());
+  }
+
+  return true;
+}
+
+void ObjRecInterface::recognize_objects_thread()
 {
   ros::Rate max_rate(100.0);
 
+  // Working structures
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_full(new pcl::PointCloud<pcl::PointXYZRGB>());
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
   boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > voxel_grid(new pcl::VoxelGrid<pcl::PointXYZRGB>());
@@ -318,14 +468,14 @@ void ObjRecInterface::recognize_objects()
   pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
   pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
   pcl::PointIndices::Ptr outliers (new pcl::PointIndices);
-  
+
   // Create point clouds for foreground and background points
   vtkSmartPointer<vtkPoints> foreground_points;
   foreground_points.TakeReference(vtkPoints::New(VTK_DOUBLE));
 
-  std::list<boost::shared_ptr<PointSetShape> > detected_models;
+  std::list<PointSetShape*> detected_models;
 
-  while(ros::ok() && !time_to_stop_) 
+  while(ros::ok() && !time_to_stop_)
   {
     // Don't hog the cpu
     max_rate.sleep();
@@ -333,9 +483,10 @@ void ObjRecInterface::recognize_objects()
     cloud_full->clear();
     cloud->clear();
 
-    // Scope for syncrhonization
     ROS_DEBUG_STREAM("ObjRec: Aggregating point clouds... ");
     {
+      // Scope for syncrhonization
+
       // Continue if the cloud is empty
       static ros::Rate warn_rate(1.0);
       if(clouds_.empty()) {
@@ -343,7 +494,7 @@ void ObjRecInterface::recognize_objects()
         warn_rate.sleep();
         continue;
       }
-      
+
       // Lock the buffer mutex
       boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
 
@@ -363,92 +514,21 @@ void ObjRecInterface::recognize_objects()
       }
     }
 
-    ROS_DEBUG_STREAM("ObjRec: Downsampling full cloud from "<<cloud_full->points.size()<<" points...");
+    // Recongize objects
+    bool objects_recognized = this->recognize_objects(
+        cloud_full,
+        cloud,
+        voxel_grid,
+        coefficients, inliers, outliers,
+        foreground_points,
+        detected_models,
+        true,
+        true);
 
-    voxel_grid->setLeafSize(
-        downsample_voxel_size_,
-        downsample_voxel_size_,
-        downsample_voxel_size_);
-    voxel_grid->setInputCloud(cloud_full);
-    voxel_grid->filter(*cloud);
-
-    ROS_DEBUG_STREAM("ObjRec: Downsampled cloud has "<<cloud->points.size()<<" points.");
-
-
-
-    ROS_DEBUG("ObjRec: Removing points not above plane with PCL...");
-
-    // Create the segmentation object
-    pcl::SACSegmentation<pcl::PointXYZRGB> seg;
-    // Optional
-    seg.setOptimizeCoefficients (true);
-    // Mandatory
-    seg.setModelType (pcl::SACMODEL_PLANE);
-    seg.setMethodType (pcl::SAC_RANSAC);
-    seg.setDistanceThreshold (0.01);
-
-    seg.setInputCloud (cloud);
-    seg.segment (*inliers, *coefficients);
-
-    if (inliers->indices.size () == 0)
-    {
-      ROS_ERROR_STREAM("Could not estimate a planar model for the given dataset.");
+    // No objects recognized
+    if(!objects_recognized) {
       continue;
     }
-
-    ROS_DEBUG_STREAM("Objrec: found plane with "<<inliers->indices.size()<<" points");
-
-    // Flip plane if it's pointing away
-    if(coefficients->values[2] > 0.0) {
-      coefficients->values[0] *= -1.0;
-      coefficients->values[1] *= -1.0;
-      coefficients->values[2] *= -1.0;
-      coefficients->values[3] *= -1.0;
-    }
-
-    // Remove the planar inliers, extract the rest
-    pcl::ExtractIndices<pcl::PointXYZRGB> extract;
-    extract.setInputCloud(cloud);
-    extract.setIndices(inliers);
-    extract.setNegative(true);
-    extract.filter(*cloud);
-
-    ROS_DEBUG_STREAM("Objrec: extracted "<<cloud->points.size()<<" foreground points");
-
-    foreground_points->SetNumberOfPoints(cloud->points.size());
-    foreground_points->Reset();
-
-    // Require the points are inside of the clopping box
-    for (pcl::PointCloud<pcl::PointXYZRGB>::const_iterator it = cloud->begin();
-         it != cloud->end();
-         ++it)
-    {
-      const double dist = 
-        it->x * coefficients->values[0] +
-        it->y * coefficients->values[1] +
-        it->z * coefficients->values[2] + 
-        coefficients->values[3];
-
-      if(dist > plane_thickness_/2.0) {
-        // Add point if it's above the plane
-        foreground_points->InsertNextPoint(
-            it->x,
-            it->y,
-            it->z);
-      }
-    }
-
-    // Detect models
-    ROS_DEBUG_STREAM("ObjRec: Attempting recognition on "<<foreground_points->GetNumberOfPoints()<<" foregeound points...");
-    detected_models.clear();
-    int success = objrec_->doRecognition(foreground_points, success_probability_, detected_models);
-    if(success != 0) {
-      ROS_ERROR_STREAM("Failed to recognize anything!");
-    }
-
-    ROS_DEBUG("ObjRec: Seconds elapsed = %.2lf", objrec_->getLastOverallRecognitionTimeSec());
-    ROS_DEBUG("ObjRec: Seconds per hypothesis = %.6lf", objrec_->getLastOverallRecognitionTimeSec()
-        / (double) objrec_->getLastNumberOfCheckedHypotheses());
 
     // Construct recognized objects message
     objrec_msgs::RecognizedObjects objects_msg;

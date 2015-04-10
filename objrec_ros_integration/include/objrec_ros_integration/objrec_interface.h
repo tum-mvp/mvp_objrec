@@ -28,6 +28,7 @@
 #include <objrec_msgs/ObjRecConfig.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl/filters/voxel_grid.h>
 #include <tf/transform_listener.h>
 
 namespace objrec_ros_integration {
@@ -37,6 +38,20 @@ namespace objrec_ros_integration {
     ~ObjRecInterface();
 
     void set_device_map(std::string &cuda_devices);
+
+    bool recognize_objects(
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr &cloud_full,
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr &cloud,
+        boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > &voxel_grid,
+        pcl::ModelCoefficients::Ptr &coefficients,
+        pcl::PointIndices::Ptr &inliers,
+        pcl::PointIndices::Ptr &outliers,
+        vtkSmartPointer<vtkPoints> &foreground_points,
+        std::list<PointSetShape*> &detected_models,
+        bool downsample,
+        bool segment_plane);
+
+    void start();
 
   private:
     void load_models_from_rosparam();
@@ -48,7 +63,7 @@ namespace objrec_ros_integration {
 
     void cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg);
     void pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > &points_msg);
-    void recognize_objects();
+    void recognize_objects_thread();
     void publish_markers(const objrec_msgs::RecognizedObjects &msg);
 
     // ROS Structures
@@ -69,6 +84,7 @@ namespace objrec_ros_integration {
     double downsample_voxel_size_;
     double confidence_time_multiplier_;
 
+    bool clip_cloud_;
     double x_clip_min_;
     double x_clip_max_;
     double y_clip_min_;
@@ -93,7 +109,7 @@ namespace objrec_ros_integration {
     std::list<boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > > clouds_;
     boost::scoped_ptr<boost::thread> recognition_thread_;
 
-    // ObjRec parameters (all in millimeter)
+    // ObjRec parameters (all in meter)
     double pair_width_;
     double voxel_size_;
     double object_visibility_;
@@ -113,7 +129,7 @@ namespace objrec_ros_integration {
     // All points in the input scene which have z-values bigger than
     // 'maxSceneZValue' will be ignored.  This makes sense only if
     // 'cutDistantScenePoints' = true;
-    double max_scene_z_value_;// in millimeter
+    double max_scene_z_value_;
 
     // If set to 'false' all scene points will be used for the recognition.
     // However, it makes sense to set it to 'true' since a typical stereo
@@ -131,6 +147,7 @@ namespace objrec_ros_integration {
     double success_probability_;
 
     // Plane detection parameters
+    bool do_plane_extraction_;
     double plane_thickness_; // Since real data is noisy the plane is not infinitely thin
     double rel_num_of_plane_points_; // At least 20% of the scene points belong to the plane
   };
