@@ -84,6 +84,7 @@ namespace objrec_ros_integration {
     double downsample_voxel_size_;
     double confidence_time_multiplier_;
 
+    bool clip_cloud_;
     double x_clip_min_;
     double x_clip_max_;
     double y_clip_min_;
@@ -108,7 +109,7 @@ namespace objrec_ros_integration {
     std::list<boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > > clouds_;
     boost::scoped_ptr<boost::thread> recognition_thread_;
 
-    // ObjRec parameters (all in millimeter)
+    // ObjRec parameters (all in meter)
     double pair_width_;
     double voxel_size_;
     double object_visibility_;
@@ -128,7 +129,7 @@ namespace objrec_ros_integration {
     // All points in the input scene which have z-values bigger than
     // 'maxSceneZValue' will be ignored.  This makes sense only if
     // 'cutDistantScenePoints' = true;
-    double max_scene_z_value_;// in millimeter
+    double max_scene_z_value_;
 
     // If set to 'false' all scene points will be used for the recognition.
     // However, it makes sense to set it to 'true' since a typical stereo
@@ -146,6 +147,7 @@ namespace objrec_ros_integration {
     double success_probability_;
 
     // Plane detection parameters
+    bool do_plane_extraction_;
     double plane_thickness_; // Since real data is noisy the plane is not infinitely thin
     double rel_num_of_plane_points_; // At least 20% of the scene points belong to the plane
   };

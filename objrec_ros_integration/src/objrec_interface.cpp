@@ -87,12 +87,15 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   //scene_points_(vtkPoints::New(VTK_DOUBLE)),
   time_to_stop_(false),
   use_cuda_(false)
+  clip_cloud_(true);
+  do_plane_extraction_(true);
 {
   // Interface configuration
   nh.getParam("publish_markers", publish_markers_enabled_);
   nh.getParam("n_clouds_per_recognition", n_clouds_per_recognition_);
   nh.getParam("downsample_voxel_size", downsample_voxel_size_);
 
+  nh.getParam("clip_cloud", clip_cloud);
   nh.getParam("x_clip_min", x_clip_min_);
   nh.getParam("x_clip_max", x_clip_max_);
   nh.getParam("y_clip_min", y_clip_min_);
