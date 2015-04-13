@@ -17,4 +17,5 @@ if __name__ == '__main__':
     writer = vtk.vtkSTLWriter()
     writer.SetFileName(out_filename)
     writer.SetInputConnection(reader.GetOutputPort())
+    writer.SetFileTypeToBinary()
     writer.Write()
