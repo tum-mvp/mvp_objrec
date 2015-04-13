@@ -147,9 +147,7 @@ namespace objrec_ros_integration {
     double success_probability_;
 
     // Plane detection parameters
-    bool do_plane_extraction_;
     double plane_thickness_; // Since real data is noisy the plane is not infinitely thin
-    double rel_num_of_plane_points_; // At least 20% of the scene points belong to the plane
   };
 }
 

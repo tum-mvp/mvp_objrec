@@ -86,16 +86,15 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   //TODO: remove this / unnecessary
   //scene_points_(vtkPoints::New(VTK_DOUBLE)),
   time_to_stop_(false),
-  use_cuda_(false)
-  clip_cloud_(true);
-  do_plane_extraction_(true);
+  use_cuda_(false),
+  clip_cloud_(true)
 {
   // Interface configuration
   nh.getParam("publish_markers", publish_markers_enabled_);
   nh.getParam("n_clouds_per_recognition", n_clouds_per_recognition_);
   nh.getParam("downsample_voxel_size", downsample_voxel_size_);
 
-  nh.getParam("clip_cloud", clip_cloud);
+  nh.getParam("clip_cloud", clip_cloud_);
   nh.getParam("x_clip_min", x_clip_min_);
   nh.getParam("x_clip_max", x_clip_max_);
   nh.getParam("y_clip_min", y_clip_min_);
@@ -142,7 +141,6 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
 
   // Plane detection parameters
   require_param(nh,"plane_thickness",plane_thickness_);
-  require_param(nh,"rel_num_of_plane_points",rel_num_of_plane_points_);
 
   // Construct subscribers and publishers
   cloud_sub_ = nh.subscribe("points", 1, &ObjRecInterface::cloud_cb, this);
@@ -303,6 +301,7 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
   downsample_voxel_size_ = config.downsample_voxel_size;
   confidence_time_multiplier_ = config.confidence_time_multiplier;
 
+  clip_cloud_ = config.clip_cloud;
   x_clip_min_ = config.x_clip_min;
   x_clip_max_ = config.x_clip_max;
   y_clip_min_ = config.y_clip_min;
@@ -361,8 +360,8 @@ bool ObjRecInterface::recognize_objects(
     bool segment_plane)
 {
   // Downsample cloud
-  ROS_DEBUG_STREAM("ObjRec: Downsampling full cloud from "<<cloud_full->points.size()<<" points...");
   {
+    ROS_DEBUG_STREAM("ObjRec: Downsampling full cloud from "<<cloud_full->points.size()<<" points...");
     voxel_grid->setLeafSize(
         downsample_voxel_size_,
         downsample_voxel_size_,
@@ -374,8 +373,9 @@ bool ObjRecInterface::recognize_objects(
   }
 
   // Remove plane points
-  ROS_DEBUG("ObjRec: Removing points not above plane with PCL...");
+  if(use_only_points_above_plane_)
   {
+    ROS_DEBUG("ObjRec: Removing points not above plane with PCL...");
     // Create the segmentation object
     pcl::SACSegmentation<pcl::PointXYZRGB> seg;
     // Optional
@@ -440,8 +440,8 @@ bool ObjRecInterface::recognize_objects(
   }
 
   // Detect models
-  ROS_DEBUG_STREAM("ObjRec: Attempting recognition on "<<foreground_points->GetNumberOfPoints()<<" foregeound points...");
   {
+    ROS_DEBUG_STREAM("ObjRec: Attempting recognition on "<<foreground_points->GetNumberOfPoints()<<" foregeound points...");
     detected_models.clear();
     int success = objrec_->doRecognition(foreground_points, success_probability_, detected_models);
     if(success != 0) {
