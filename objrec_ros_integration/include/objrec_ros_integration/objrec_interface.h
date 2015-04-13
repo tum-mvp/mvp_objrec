@@ -47,7 +47,7 @@ namespace objrec_ros_integration {
         pcl::PointIndices::Ptr &inliers,
         pcl::PointIndices::Ptr &outliers,
         vtkSmartPointer<vtkPoints> &foreground_points,
-        std::list<PointSetShape*> &detected_models,
+        std::list<boost::shared_ptr<PointSetShape> > &detected_models,
         bool downsample,
         bool segment_plane);
 

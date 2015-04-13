@@ -355,7 +355,7 @@ bool ObjRecInterface::recognize_objects(
     pcl::PointIndices::Ptr &inliers,
     pcl::PointIndices::Ptr &outliers,
     vtkSmartPointer<vtkPoints> &foreground_points,
-    std::list<PointSetShape*> &detected_models,
+    std::list<boost::shared_ptr<PointSetShape> > &detected_models,
     bool downsample,
     bool segment_plane)
 {
@@ -473,7 +473,7 @@ void ObjRecInterface::recognize_objects_thread()
   vtkSmartPointer<vtkPoints> foreground_points;
   foreground_points.TakeReference(vtkPoints::New(VTK_DOUBLE));
 
-  std::list<PointSetShape*> detected_models;
+  std::list<boost::shared_ptr<PointSetShape> > detected_models;
 
   while(ros::ok() && !time_to_stop_)
   {
