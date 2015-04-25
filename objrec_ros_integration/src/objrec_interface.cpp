@@ -9,6 +9,7 @@
 #include <vtkPolyDataWriter.h>
 #include <vtkPolyData.h>
 #include <vtkDoubleArray.h>
+#include <vtkFloatArray.h>
 #include <vtkPointData.h>
 #include <vtkCommand.h>
 #include <vtkPoints.h>
@@ -223,18 +224,18 @@ void ObjRecInterface::add_model(
   readers_.push_back(reader);
 
   // Get the VTK normals
-  vtkSmartPointer<vtkPolyData> polydata = reader->GetOutput();
-  vtkSmartPointer<vtkDoubleArray> pointNormalsRetrieved =
-    vtkDoubleArray::SafeDownCast(polydata->GetPointData()->GetNormals());
+  vtkSmartPointer<vtkPolyData> polydata(reader->GetOutput());
+  vtkSmartPointer<vtkFloatArray> point_normals(
+    vtkFloatArray::SafeDownCast(polydata->GetPointData()->GetNormals()));
 
-  if(!pointNormalsRetrieved) {
+  if(!point_normals) {
     ROS_ERROR_STREAM("No vertex normals for mesh: "<<model_uri);
     return;
   }
 
   // Get the VTK points
   size_t n_points = polydata->GetNumberOfPoints();
-  size_t n_normals = pointNormalsRetrieved->GetNumberOfTuples();
+  size_t n_normals = point_normals->GetNumberOfTuples();
 
   if(n_points != n_normals) {
     ROS_ERROR_STREAM("Different numbers of vertices and vertex normals for mesh: "<<model_uri);
@@ -248,7 +249,7 @@ void ObjRecInterface::add_model(
     double pN[3];
 
     polydata->GetPoint(i, pV);
-    pointNormalsRetrieved->GetTuple(i, pN);
+    point_normals->GetTuple(i, pN);
   }
 
   // Create new model user data
@@ -436,6 +437,21 @@ bool ObjRecInterface::recognize_objects(
             it->y,
             it->z);
       }
+    }
+  } else {
+    // Fill the foreground cloud
+    foreground_points->SetNumberOfPoints(cloud->points.size());
+    foreground_points->Reset();
+
+    // Require the points are inside of the clopping box
+    for (pcl::PointCloud<pcl::PointXYZRGB>::const_iterator it = cloud->begin();
+         it != cloud->end();
+         ++it)
+    {
+      foreground_points->InsertNextPoint(
+          it->x,
+          it->y,
+          it->z);
     }
   }
 
