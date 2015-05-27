@@ -294,6 +294,8 @@ void ObjRecInterface::reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t
 	objrec_->setNumberOfThreads(num_threads_);
 	objrec_->setUseCUDA(use_cuda_);
 	objrec_->setCUDADeviceMap(cuda_device_map_);
+	objrec_->setDebugNormals(config.debug_normals);
+	objrec_->setDebugNormalRadius(config.debug_normal_radius);
 
   // Other parameters
   use_only_points_above_plane_ = config.use_only_points_above_plane;
