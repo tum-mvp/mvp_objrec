@@ -106,8 +106,10 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   // Get construction parameters from ROS & construct object recognizer
   require_param(nh,"pair_width",pair_width_);
   require_param(nh,"voxel_size",voxel_size_);
+  double hashtable_filter_ratio = 0.5;
+  require_param(nh,"hashtable_filter_ratio",hashtable_filter_ratio);
 
-  objrec_.reset(new ObjRecRANSAC(pair_width_, voxel_size_, 0.5));
+  objrec_.reset(new ObjRecRANSAC(pair_width_, voxel_size_, hashtable_filter_ratio));
   objrec_->printParameters(stderr);
 
   // Get post-construction parameters from ROS
